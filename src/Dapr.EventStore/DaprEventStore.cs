@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace Dapr.EventStore
 {
-    public class DaprEventStore 
+    public class DaprEventStore
     {
         private readonly global::Dapr.Client.DaprClient client;
         public string StoreName { get; set; } = "statestore";
@@ -26,17 +26,13 @@ namespace Dapr.EventStore
                 return head.Value.Version;
 
             if (head.Value.Version != version)
-            {
-                var sliceExists = (await client.GetStateEntryAsync<EventData[]>(StoreName, $"{streamName}|{head.Value.Version}")).Value != null;
-                if(sliceExists)
-                    throw new DBConcurrencyException($"wrong version - expected {version} but was {head.Value.Version}");
-            }
+                throw new DBConcurrencyException($"wrong version - expected {version} but was {head.Value.Version}");
 
             var newVersion = head.Value.Version + events.Length;
             head.Value.Version = newVersion;
             await head.SaveAsync();
             var versionedEvents = events
-                .Select((e, i) => new EventData { Data = e.Data, Version = version + (i + 1)})
+                .Select((e, i) => new EventData { Data = e.Data, Version = version + (i + 1) })
                 .ToArray();
             await client.SaveStateAsync(StoreName, $"{streamName}|{newVersion}", versionedEvents);
             return newVersion;
@@ -58,7 +54,7 @@ namespace Dapr.EventStore
                 next = slice.First().Version - 1;
 
                 if (next < version)
-                { 
+                {
                     eventSlices.Add(slice.Where(e => e.Version > version).ToArray());
                     break;
                 }
