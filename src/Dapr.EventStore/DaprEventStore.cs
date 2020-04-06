@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using Microsoft.Extensions.Logging;
+using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,11 +9,14 @@ namespace Dapr.EventStore
     public class DaprEventStore
     {
         private readonly global::Dapr.Client.DaprClient client;
+        private readonly ILogger logger;
+
         public string StoreName { get; set; } = "statestore";
 
-        public DaprEventStore(global::Dapr.Client.DaprClient client)
+        public DaprEventStore(global::Dapr.Client.DaprClient client, ILogger logger)
         {
             this.client = client;
+            this.logger = logger;
         }
 
         public async Task<long> AppendToStreamAsync(string streamName, long version, params EventData[] events)
@@ -64,9 +68,14 @@ namespace Dapr.EventStore
 
             var events = eventSlices
                 .Reverse<EventData[]>()
-                .SelectMany(e => e);
+                .SelectMany(e => e)
+                .ToArray();
 
-            return (events, events.Last().Version);
+            var lastVersion = events.Last().Version;
+            if (lastVersion != head.Value.Version)
+                logger.LogWarning("Stream Head Version ({headVersion}) didn't match returned version ({lastVersion})", head.Value.Version, lastVersion);
+
+            return (events, lastVersion);
         }
 
         public class StreamHead

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
@@ -7,12 +8,18 @@ namespace Dapr.EventStore.Tests
 {
     public class EventStoreTests
     {
+        private readonly StateTestClient client;
+        private readonly DaprEventStore store;
+
+        public EventStoreTests()
+        {
+            client = new StateTestClient();
+            store = new DaprEventStore(client, NullLogger.Instance);
+        }
+
         [Fact]
         public async Task LoadReturnsVersion()
         {
-            var client = new StateTestClient();
-            var store = new DaprEventStore(client);
-
             _ = await store.AppendToStreamAsync("test", 0, new EventData[] { new EventData { Data = "hello 1" } });
             var stream = await store.LoadEventStreamAsync("test", 0);
 
@@ -22,9 +29,6 @@ namespace Dapr.EventStore.Tests
         [Fact]
         public async Task LoadMutipleReturnsVersion()
         {
-            var client = new StateTestClient();
-            var store = new DaprEventStore(client);
-
             await store.AppendToStreamAsync("test", 0, new EventData[] { new EventData { Data = "hello 1" } });
             await store.AppendToStreamAsync("test", 1, new EventData[] { new EventData { Data = "hello 2" } });
             await store.AppendToStreamAsync("test", 2, new EventData[] { new EventData { Data = "hello 3" } });
@@ -37,9 +41,6 @@ namespace Dapr.EventStore.Tests
         [Fact]
         public async Task LoadArrayReturnsVersion()
         {
-            var client = new StateTestClient();
-            var store = new DaprEventStore(client);
-
             await store.AppendToStreamAsync("test", 0, new EventData[]
             {
                 new EventData { Data = "hello 1" },
@@ -56,9 +57,6 @@ namespace Dapr.EventStore.Tests
         [Fact]
         public async Task LoadMultipleArraysReturnsVersion()
         {
-            var client = new StateTestClient();
-            var store = new DaprEventStore(client);
-
             await store.AppendToStreamAsync("test", 0, new EventData[]
             {
                 new EventData { Data = "hello 1" },
@@ -79,9 +77,6 @@ namespace Dapr.EventStore.Tests
         [Fact]
         public async Task LoadMultipleArraysReturnsVersionInSlice()
         {
-            var client = new StateTestClient();
-            var store = new DaprEventStore(client);
-
             await store.AppendToStreamAsync("test", 0, new EventData[]
             {
                 new EventData { Data = "hello 1" },
@@ -103,9 +98,6 @@ namespace Dapr.EventStore.Tests
         [Fact]
         public async Task AppendReturnsVersion()
         {
-            var client = new StateTestClient();
-            var store = new DaprEventStore(client);
-
             var version = await store.AppendToStreamAsync("test", 0, new EventData[] { new EventData { Data = "hello 1" } });
 
             Assert.Equal(1, version);
@@ -114,9 +106,6 @@ namespace Dapr.EventStore.Tests
         [Fact]
         public async Task AppendMultipleReturnsVersion()
         {
-            var client = new StateTestClient();
-            var store = new DaprEventStore(client);
-
             await store.AppendToStreamAsync("test", 0, new EventData[] { new EventData { Data = "hello 1" } });
             await store.AppendToStreamAsync("test", 1, new EventData[] { new EventData { Data = "hello 2" } });
             var version = await store.AppendToStreamAsync("test", 2, new EventData[] { new EventData { Data = "hello 3" } });
@@ -127,9 +116,6 @@ namespace Dapr.EventStore.Tests
         [Fact]
         public async Task AppendToWrongVersionThrows()
         {
-            var client = new StateTestClient();
-            var store = new DaprEventStore(client);
-
             await Assert.ThrowsAsync<DBConcurrencyException>(async () =>
             {
                 _ = await store.AppendToStreamAsync("test", 0, new EventData[] { new EventData { Data = "hello 1" } });
@@ -140,9 +126,6 @@ namespace Dapr.EventStore.Tests
         [Fact]
         public async Task AppendAndLoad()
         {
-            var client = new StateTestClient();
-            var store = new DaprEventStore(client);
-
             var versionV1 = await store.AppendToStreamAsync("test", 0,
                 new EventData[] { new EventData { Data = "hello 1" } });
             var streamV1 = await store.LoadEventStreamAsync("test", 0);
