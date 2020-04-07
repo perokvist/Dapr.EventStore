@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -9,17 +10,27 @@ namespace Dapr.EventStore
     public class DaprEventStore
     {
         private readonly global::Dapr.Client.DaprClient client;
-        private readonly ILogger logger;
 
         public string StoreName { get; set; } = "statestore";
 
-        public DaprEventStore(global::Dapr.Client.DaprClient client, ILogger logger)
+        public DaprEventStore(global::Dapr.Client.DaprClient client)
         {
             this.client = client;
-            this.logger = logger;
         }
 
-        public async Task<long> AppendToStreamAsync(string streamName, long version, params EventData[] events)
+        public Task<long> AppendToStreamAsync(string streamName, long version, params EventData[] events)
+            => AppendToStreamAsync(
+                streamName,
+                Concurrency.Match(version),
+                events);
+
+        public Task<long> AppendToStreamAsync(string streamName, params EventData[] events)
+            => AppendToStreamAsync(
+                streamName,
+                Concurrency.Ignore(),
+                events);
+
+        public async Task<long> AppendToStreamAsync(string streamName, Action<StreamHead> concurrencyGuard, params EventData[] events)
         {
             var head = await client.GetStateEntryAsync<StreamHead>(StoreName, $"{streamName}|head");
 
@@ -29,15 +40,14 @@ namespace Dapr.EventStore
             if (!events.Any())
                 return head.Value.Version;
 
-            if (head.Value.Version != version)
-                throw new DBConcurrencyException($"wrong version - expected {version} but was {head.Value.Version}");
-
+            concurrencyGuard(head.Value);
+        
             var newVersion = head.Value.Version + events.Length;
-            head.Value.Version = newVersion;
             var versionedEvents = events
-                .Select((e, i) => new EventData { Data = e.Data, Version = version + (i + 1) })
+                .Select((e, i) => new EventData { Data = e.Data, Version = head.Value.Version + (i + 1) })
                 .ToArray();
             await client.SaveStateAsync(StoreName, $"{streamName}|{newVersion}", versionedEvents);
+            head.Value.Version = newVersion;
             await head.SaveAsync();
             return newVersion;
         }
@@ -47,7 +57,7 @@ namespace Dapr.EventStore
             var head = await client.GetStateEntryAsync<StreamHead>(StoreName, $"{streamName}|head");
 
             if (head.Value == null)
-                return (Enumerable.Empty<EventData>(), 0);
+                return (Enumerable.Empty<EventData>(), new StreamHead().Version);
 
             var eventSlices = new List<EventData[]>();
 
@@ -77,6 +87,17 @@ namespace Dapr.EventStore
         public class StreamHead
         {
             public long Version { get; set; }
+        }
+
+        public class Concurrency
+        {
+            public static Action<StreamHead> Match(long version) => head =>
+            {
+                if (head.Version != version)
+                    throw new DBConcurrencyException($"wrong version - expected {version} but was {head.Version}");
+            };
+
+            public static Action<StreamHead> Ignore() => _ => { };
         }
     }
 

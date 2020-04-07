@@ -14,7 +14,7 @@ namespace Dapr.EventStore.Tests
         public EventStoreTests()
         {
             client = new StateTestClient();
-            store = new DaprEventStore(client, NullLogger.Instance);
+            store = new DaprEventStore(client);// NullLogger.Instance);
         }
 
         [Fact]

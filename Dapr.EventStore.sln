@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Dapr.EventStore", "src\Dapr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dapr.EventStore.Tests", "test\Dapr.EventStore.Tests\Dapr.EventStore.Tests.csproj", "{AF3638C2-57F2-453F-A085-4D41A6BC59A2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dapr.EventStore.Web", "src\Dapr.EventStore.Web\Dapr.EventStore.Web.csproj", "{C3DE233A-C1B3-48D8-B44F-223BBB13B4F7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{AF3638C2-57F2-453F-A085-4D41A6BC59A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AF3638C2-57F2-453F-A085-4D41A6BC59A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AF3638C2-57F2-453F-A085-4D41A6BC59A2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C3DE233A-C1B3-48D8-B44F-223BBB13B4F7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C3DE233A-C1B3-48D8-B44F-223BBB13B4F7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C3DE233A-C1B3-48D8-B44F-223BBB13B4F7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C3DE233A-C1B3-48D8-B44F-223BBB13B4F7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
