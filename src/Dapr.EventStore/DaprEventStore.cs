@@ -34,11 +34,11 @@ namespace Dapr.EventStore
 
             var newVersion = head.Value.Version + events.Length;
             head.Value.Version = newVersion;
-            await head.SaveAsync();
             var versionedEvents = events
                 .Select((e, i) => new EventData { Data = e.Data, Version = version + (i + 1) })
                 .ToArray();
             await client.SaveStateAsync(StoreName, $"{streamName}|{newVersion}", versionedEvents);
+            await head.SaveAsync();
             return newVersion;
         }
 
@@ -71,11 +71,7 @@ namespace Dapr.EventStore
                 .SelectMany(e => e)
                 .ToArray();
 
-            var lastVersion = events.Last().Version;
-            if (lastVersion != head.Value.Version)
-                logger.LogWarning("Stream Head Version ({headVersion}) didn't match returned version ({lastVersion})", head.Value.Version, lastVersion);
-
-            return (events, lastVersion);
+            return (events, events.Last().Version);
         }
 
         public class StreamHead
