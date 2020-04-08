@@ -75,6 +75,21 @@ namespace Dapr
             return Task.CompletedTask;
         }
 
+        public override async ValueTask<bool> TrySaveStateAsync<TValue>(
+            string storeName, 
+            string key, TValue value, 
+            string etag, 
+            StateOptions stateOptions = null, 
+            Dictionary<string, string> metadata = null, 
+            CancellationToken cancellationToken = default)
+        {
+            if (etag != "test_etag")
+                return false;
+
+            await SaveStateAsync(storeName, key, value,stateOptions, metadata, cancellationToken);
+            return true;
+        }
+
         public override Task DeleteStateAsync(
            string storeName,
            string key,

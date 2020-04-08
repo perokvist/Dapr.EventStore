@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -32,23 +31,38 @@ namespace Dapr.EventStore
 
         public async Task<long> AppendToStreamAsync(string streamName, Action<StreamHead> concurrencyGuard, params EventData[] events)
         {
-            var head = await client.GetStateEntryAsync<StreamHead>(StoreName, $"{streamName}|head");
+            var streamKey = $"{streamName}|head";
+            var (head, headetag) = await client.GetStateAndETagAsync<StreamHead>(StoreName, streamKey);
 
-            if (head.Value == null)
-                head.Value = new StreamHead();
+            if (head == null)
+                head = new StreamHead();
 
             if (!events.Any())
-                return head.Value.Version;
+                return head.Version;
 
-            concurrencyGuard(head.Value);
+            concurrencyGuard(head);
         
-            var newVersion = head.Value.Version + events.Length;
+            var newVersion = head.Version + events.Length;
             var versionedEvents = events
-                .Select((e, i) => new EventData { Data = e.Data, Version = head.Value.Version + (i + 1) })
+                .Select((e, i) => new EventData { Data = e.Data, Version = head.Version + (i + 1) })
                 .ToArray();
-            await client.SaveStateAsync(StoreName, $"{streamName}|{newVersion}", versionedEvents);
-            head.Value.Version = newVersion;
-            await head.SaveAsync();
+
+            var sliceKey = $"{streamName}|{newVersion}";
+
+            var (slice, sliceetag) = await client.GetStateAndETagAsync<EventData[]>(StoreName, sliceKey);
+            if(slice != null)
+                throw new DBConcurrencyException($"Event slice {sliceKey} ending with event version {newVersion} already exists");
+
+            var sliceWriteSuccess = await client.TrySaveStateAsync(StoreName, sliceKey, versionedEvents, sliceetag);
+            if(!sliceWriteSuccess)
+                throw new DBConcurrencyException($"Error writing events. Event slice {sliceKey} ending with event version {newVersion} already exists");
+
+            head.Version = newVersion;
+            var headWriteSuccess = await client.TrySaveStateAsync(StoreName, streamKey, head, headetag);
+
+            if (!headWriteSuccess)
+                throw new DBConcurrencyException($"stream head {streamKey} have been updated");
+
             return newVersion;
         }
 
@@ -103,6 +117,8 @@ namespace Dapr.EventStore
 
     public class EventData
     {
+        public Guid EventId { get; set; } = Guid.NewGuid();
+        public string EventName { get; set; }
         public string Data { get; set; }
         public long Version { get; internal set; }
     }
