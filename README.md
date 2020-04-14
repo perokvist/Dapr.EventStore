@@ -5,8 +5,6 @@ Demo implementation of an naive EventStore with DaprClient (as feedback)
 
 Dapr state is key/value, a [key scheme](https://github.com/dapr/docs/blob/master/reference/api/state_api.md#key-scheme) app-id || key for the non actor scenario. 
 
-Dapr state is key/value, a key scheme app-id || key for the non actor scenario.
-
 ### Append
 To build an "append only" stream on top of that, this ES save a entry for stream head, with streamName as key, and each set/slice of events as one entry with "streamName-Version" as key. To come close to append, etags are used to check that the slice not exist. The stream head is updated when a new slice is written, but the head and slice is not in the same transaction.
 
