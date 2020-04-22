@@ -34,7 +34,7 @@ namespace Dapr.Actors.EventStore
             head.Version = newVersion;
             await stateManager.SetStateAsync(streamKey, head);
 
-            await stateManager.SaveStateAsync();
+            await stateManager.SaveStateAsync(); //TODO switch
 
             return newVersion;
         }
@@ -70,7 +70,7 @@ namespace Dapr.Actors.EventStore
                 .SelectMany(e => e)
                 .ToArray();
 
-            return (events, events.Last().Version);
+            return (events, events.LastOrDefault()?.Version ?? head.Version);
         }
 
 
@@ -85,6 +85,6 @@ namespace Dapr.Actors.EventStore
         public Guid EventId { get; set; } = Guid.NewGuid();
         public string EventName { get; set; }
         public string Data { get; set; }
-        public long Version { get; internal set; }
+        public long Version { get; set; }
     }
 }

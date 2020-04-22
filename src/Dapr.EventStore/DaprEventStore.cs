@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -9,12 +10,14 @@ namespace Dapr.EventStore
     public class DaprEventStore
     {
         private readonly global::Dapr.Client.DaprClient client;
+        private readonly ILogger<DaprEventStore> logger;
 
         public string StoreName { get; set; } = "statestore";
 
-        public DaprEventStore(global::Dapr.Client.DaprClient client)
+        public DaprEventStore(global::Dapr.Client.DaprClient client, ILogger<DaprEventStore> logger)
         {
             this.client = client;
+            this.logger = logger;
         }
 
         public Task<long> AppendToStreamAsync(string streamName, long version, params EventData[] events)
@@ -41,20 +44,20 @@ namespace Dapr.EventStore
                 return head.Version;
 
             concurrencyGuard(head);
-        
+
             var newVersion = head.Version + events.Length;
             var versionedEvents = events
-                .Select((e, i) => new EventData { Data = e.Data, Version = head.Version + (i + 1) })
+                .Select((e, i) => new EventData { EventId = e.EventId, EventName = e.EventName, Data = e.Data, Version = head.Version + (i + 1) })
                 .ToArray();
 
             var sliceKey = $"{streamName}|{newVersion}";
 
             var (slice, sliceetag) = await client.GetStateAndETagAsync<EventData[]>(StoreName, sliceKey);
-            if(slice != null)
+            if (slice != null)
                 throw new DBConcurrencyException($"Event slice {sliceKey} ending with event version {newVersion} already exists");
 
             var sliceWriteSuccess = await client.TrySaveStateAsync(StoreName, sliceKey, versionedEvents, sliceetag);
-            if(!sliceWriteSuccess)
+            if (!sliceWriteSuccess)
                 throw new DBConcurrencyException($"Error writing events. Event slice {sliceKey} ending with event version {newVersion} already exists");
 
             head.Version = newVersion;
@@ -75,27 +78,39 @@ namespace Dapr.EventStore
 
             var eventSlices = new List<EventData[]>();
 
-            var next = head.Value.Version;
-            while (next != 0 && next > version)
+            using (logger.BeginScope("Loading head {streamName}. Starting version {version}", head.Key, head.Value.Version))
             {
-                var slice = await client.GetStateAsync<EventData[]>(StoreName, $"{streamName}|{next}");
-                next = slice.First().Version - 1;
+                var next = head.Value.Version;
 
-                if (next < version)
+                while (next != 0 && next > version)
                 {
-                    eventSlices.Add(slice.Where(e => e.Version > version).ToArray());
-                    break;
+                    var sliceKey = $"{streamName}|{next}";
+                    var slice = await client.GetStateAsync<EventData[]>(StoreName, sliceKey);
+                    
+                    logger.LogDebug("Slice {sliceKey} loaded range : {firstVersion} - {lastVersion}", sliceKey ,slice.First().Version, slice.Last().Version);
+                    next = slice.First().Version - 1;
+
+                    if (next < version)
+                    {
+                        logger.LogDebug("Version within slice. Next : {next}. Version : {version}", next, version);
+                        eventSlices.Add(slice.Where(e => e.Version > version).ToArray());
+                        break;
+                    }
+
+                    logger.LogDebug("Adding slice. Next : {next}. Version : {version}", next, version);
+
+                    eventSlices.Add(slice);
                 }
 
-                eventSlices.Add(slice);
+                logger.LogDebug("Done reading. Got {sliceCount} slices.", eventSlices.Count());
+
+                var events = eventSlices
+                    .Reverse<EventData[]>()
+                    .SelectMany(e => e)
+                    .ToArray();
+
+                return (events, events.LastOrDefault()?.Version ?? head.Value.Version);
             }
-
-            var events = eventSlices
-                .Reverse<EventData[]>()
-                .SelectMany(e => e)
-                .ToArray();
-
-            return (events, events.Last().Version);
         }
 
         public class StreamHead
@@ -120,6 +135,6 @@ namespace Dapr.EventStore
         public Guid EventId { get; set; } = Guid.NewGuid();
         public string EventName { get; set; }
         public string Data { get; set; }
-        public long Version { get; internal set; }
+        public long Version { get; set; }
     }
 }

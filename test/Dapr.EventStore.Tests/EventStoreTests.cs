@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Data;
 using System.Linq;
@@ -14,7 +15,7 @@ namespace Dapr.EventStore.Tests
         public EventStoreTests()
         {
             client = new StateTestClient();
-            store = new DaprEventStore(client);// NullLogger.Instance);
+            store = new DaprEventStore(client, NullLogger<DaprEventStore>.Instance);
         }
 
         [Fact]
@@ -137,6 +138,18 @@ namespace Dapr.EventStore.Tests
             Assert.Equal(versionV1, streamV1.Version);
             Assert.Equal(2, streamV2.Version);
             Assert.Equal(versionV2, streamV2.Version);
+        }
+
+        [Fact]
+        public async Task BugHunt()
+        {
+            await store.AppendToStreamAsync("test", 0, new EventData[]
+            {
+                new EventData { Data = "hello 1" },
+                //new EventData { Data = "hello 2" },
+            });
+
+            var stream = await store.LoadEventStreamAsync("test", 1);
         }
     }
 }
