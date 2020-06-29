@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp3.1</TargetFramework>
-    <VersionPrefix>0.2.1</VersionPrefix>
+    <VersionPrefix>0.7.1</VersionPrefix>
     <VersionSuffix>alpha</VersionSuffix>
     <PackageId>Dapr.EventStore</PackageId>
     <Title>Dapr.EventStore</Title>
@@ -13,6 +13,7 @@
     <LangVersion>preview</LangVersion>
     <Platform>x64</Platform>
     <PlatformTarget>x64</PlatformTarget>
+    <RepositoryUrl>https://github.com/perokvist/Dapr.EventStore</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
