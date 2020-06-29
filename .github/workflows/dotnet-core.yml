@@ -33,7 +33,7 @@ jobs:
     - name: Push Nupkg to GitHub Packages
       uses: tanaka-takayoshi/nuget-publish-to-github-packages-action@v2.1
       with:
-          nupkg-path:  './artifacts/Dapr.EventStore*.nupkg'
+          nupkg-path:  './nupkg/Dapr.EventStore*.nupkg'
           repo-owner:  'perokvist'
           gh-user:  'perokvist'
           token:  ${{ secrets.GITHUB_TOKEN }}
