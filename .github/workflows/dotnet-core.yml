@@ -29,5 +29,5 @@ jobs:
           nupkg-path:  './artifacts/Dapr.EventStore.nupkg'
           repo-owner:  'perokvist'
           gh-user:  'perokvist'
-          token:  ${{ secrets.GITHUB_TOKEN }}
+          token:  ${{ GITHUB_TOKEN }}
       
