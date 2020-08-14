@@ -34,8 +34,12 @@ namespace Dapr.EventStore
 
         public async Task<long> AppendToStreamAsync(string streamName, Action<StreamHead> concurrencyGuard, params EventData[] events)
         {
-            var streamKey = $"{streamName}|head";
-            var (head, headetag) = await client.GetStateAndETagAsync<StreamHead>(StoreName, streamKey);
+            var streamHeadKey = $"{streamName}|head";
+            var (head, headetag) = await client.GetStateAndETagAsync<StreamHead>(StoreName, streamHeadKey);
+            var meta = new Dictionary<string, string>
+            {
+                { "partitionKey", streamName }
+            };
 
             if (head == null)
                 head = new StreamHead();
@@ -56,15 +60,15 @@ namespace Dapr.EventStore
             if (slice != null)
                 throw new DBConcurrencyException($"Event slice {sliceKey} ending with event version {newVersion} already exists");
 
-            var sliceWriteSuccess = await client.TrySaveStateAsync(StoreName, sliceKey, versionedEvents, sliceetag);
+            var sliceWriteSuccess = await client.TrySaveStateAsync(StoreName, sliceKey, versionedEvents, sliceetag, metadata : meta);
             if (!sliceWriteSuccess)
                 throw new DBConcurrencyException($"Error writing events. Event slice {sliceKey} ending with event version {newVersion} already exists");
 
             head.Version = newVersion;
-            var headWriteSuccess = await client.TrySaveStateAsync(StoreName, streamKey, head, headetag);
+            var headWriteSuccess = await client.TrySaveStateAsync(StoreName, streamHeadKey, head, headetag, metadata : meta);
 
             if (!headWriteSuccess)
-                throw new DBConcurrencyException($"stream head {streamKey} have been updated");
+                throw new DBConcurrencyException($"stream head {streamHeadKey} have been updated");
 
             return newVersion;
         }
