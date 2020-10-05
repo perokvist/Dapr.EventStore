@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp3.1</TargetFramework>
-    <VersionPrefix>0.9.1</VersionPrefix>
+    <VersionPrefix>0.9.3</VersionPrefix>
     <VersionSuffix>alpha</VersionSuffix>
     <PackageId>Dapr.EventStore</PackageId>
     <Title>Dapr.EventStore</Title>
@@ -17,7 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Dapr.Client" Version="0.9.0-preview01" />
+    <PackageReference Include="Dapr.Client" Version="0.11.0-preview01" />
   </ItemGroup>
 
 </Project>
