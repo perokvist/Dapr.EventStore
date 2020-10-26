@@ -62,7 +62,7 @@ namespace Dapr.EventStore
 
             head.Version = newVersion;
 
-            if(UseTransaction)
+            if (UseTransaction)
                 await StateTransaction(streamHeadKey, head, headetag, meta, versionedEvents, sliceKey, sliceetag);
             else
                 await TwoPhased(streamHeadKey, head, headetag, meta, newVersion, versionedEvents, sliceKey, sliceetag);
@@ -71,7 +71,7 @@ namespace Dapr.EventStore
 
             async Task StateTransaction(string streamHeadKey, StreamHead head, string headetag, Dictionary<string, string> meta, EventData[] versionedEvents, string sliceKey, string sliceetag)
             {
-                var sliceReq = new StateTransactionRequest(sliceKey, JsonSerializer.SerializeToUtf8Bytes(versionedEvents), Client.StateOperationType.Upsert, sliceetag);
+                var sliceReq = new StateTransactionRequest(sliceKey, JsonSerializer.SerializeToUtf8Bytes(versionedEvents), Client.StateOperationType.Upsert, sliceetag, metadata : meta);
                 var headReq = new StateTransactionRequest(streamHeadKey, JsonSerializer.SerializeToUtf8Bytes(head), Client.StateOperationType.Upsert, etag: headetag, metadata: meta);
 
                 await client.ExecuteStateTransactionAsync(StoreName, new List<StateTransactionRequest> { sliceReq, headReq }, meta);
