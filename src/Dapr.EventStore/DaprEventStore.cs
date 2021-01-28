@@ -57,7 +57,7 @@ namespace Dapr.EventStore
                 .ToArray();
 
             var sliceKey = $"{streamName}|{newVersion}";
-            var (slice, sliceetag) = await client.GetStateAndETagAsync<EventData[]>(StoreName, sliceKey, metadata : meta);
+            var (slice, sliceetag) = await client.GetStateAndETagAsync<EventData[]>(StoreName, sliceKey, metadata: meta);
             if (slice != null)
                 throw new DBConcurrencyException($"Event slice {sliceKey} ending with event version {newVersion} already exists");
 
@@ -72,10 +72,11 @@ namespace Dapr.EventStore
 
             async Task StateTransaction(string streamHeadKey, StreamHead head, string headetag, Dictionary<string, string> meta, EventData[] versionedEvents, string sliceKey, string sliceetag)
             {
-                var sliceReq = new StateTransactionRequest(sliceKey, JsonSerializer.SerializeToUtf8Bytes(versionedEvents), Client.StateOperationType.Upsert, sliceetag, metadata : meta);
-                var headReq = new StateTransactionRequest(streamHeadKey, JsonSerializer.SerializeToUtf8Bytes(head), Client.StateOperationType.Upsert, etag: headetag, metadata: meta);
+                var sliceReq = new StateTransactionRequest(sliceKey, JsonSerializer.SerializeToUtf8Bytes(versionedEvents), Client.StateOperationType.Upsert, string.IsNullOrWhiteSpace(sliceetag) ? null : sliceetag, metadata: meta);
+                var headReq = new StateTransactionRequest(streamHeadKey, JsonSerializer.SerializeToUtf8Bytes(head), Client.StateOperationType.Upsert, etag: string.IsNullOrWhiteSpace(headetag) ? null : headetag, metadata: meta);
+                var reqs = new List<StateTransactionRequest> { sliceReq, headReq };
 
-                await client.ExecuteStateTransactionAsync(StoreName, new List<StateTransactionRequest> { sliceReq, headReq }, meta);
+                await client.ExecuteStateTransactionAsync(StoreName, reqs, meta);
             }
 
             async Task TwoPhased(string streamHeadKey, StreamHead head, string headetag, Dictionary<string, string> meta, long newVersion, EventData[] versionedEvents, string sliceKey, string sliceetag)
@@ -83,7 +84,6 @@ namespace Dapr.EventStore
                 var sliceWriteSuccess = await client.TrySaveStateAsync(StoreName, sliceKey, versionedEvents, sliceetag, metadata: meta);
                 if (!sliceWriteSuccess)
                     throw new DBConcurrencyException($"Error writing events. Event slice {sliceKey} ending with event version {newVersion} already exists");
-
 
                 var headWriteSuccess = await client.TrySaveStateAsync(StoreName, streamHeadKey, head, headetag, metadata: meta);
                 if (!headWriteSuccess)
