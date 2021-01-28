@@ -53,7 +53,7 @@ namespace Dapr.EventStore
 
             var newVersion = head.Version + events.Length;
             var versionedEvents = events
-                .Select((e, i) => new EventData { EventId = e.EventId, EventName = e.EventName, Data = e.Data, Version = head.Version + (i + 1) })
+                .Select((e, i) => new EventData(e.EventId, e.EventName, e.Data, head.Version + (i + 1)))
                 .ToArray();
 
             var sliceKey = $"{streamName}|{newVersion}";
@@ -61,7 +61,7 @@ namespace Dapr.EventStore
             if (slice != null)
                 throw new DBConcurrencyException($"Event slice {sliceKey} ending with event version {newVersion} already exists");
 
-            head.Version = newVersion;
+            head = new StreamHead(newVersion);
 
             if (UseTransaction)
                 await StateTransaction(streamHeadKey, head, headetag, meta, versionedEvents, sliceKey, sliceetag);
@@ -136,10 +136,7 @@ namespace Dapr.EventStore
             }
         }
 
-        public class StreamHead
-        {
-            public long Version { get; set; }
-        }
+        public record StreamHead(long Version = 0);
 
         public class Concurrency
         {
@@ -153,11 +150,8 @@ namespace Dapr.EventStore
         }
     }
 
-    public class EventData
+    public record EventData(string EventId, string EventName, object Data, long Version = 0)
     {
-        public Guid EventId { get; set; } = Guid.NewGuid();
-        public string EventName { get; set; }
-        public string Data { get; set; }
-        public long Version { get; set; }
+        public static EventData Create(string EventName, object Data, long Version = 0) => new EventData(Guid.NewGuid().ToString(), EventName, Data, Version);
     }
 }

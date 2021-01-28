@@ -18,7 +18,7 @@ namespace Dapr.EventStore.Tests
 
         public EventStoreTests()
         {
-            Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50000");
+            //Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50000");
             var inDapr = Environment.GetEnvironmentVariable("DAPR_GRPC_PORT") != null;
 
             if (inDapr)
@@ -47,9 +47,9 @@ namespace Dapr.EventStore.Tests
         {
             var store = "localcosmos";
             var key = Guid.NewGuid().ToString().Substring(0, 5);
-            await client.SaveStateAsync(store, key, new EventData { Data = "testing", EventName = "test", Version = 1 });
+            await client.SaveStateAsync(store, key, EventData.Create("test", "testing", 1));
             var (value, etag) = await client.GetStateAndETagAsync<EventData>(store, key);
-            await client.TrySaveStateAsync(store, key, new EventData { Data = value.Data, EventName = value.EventName, Version = 2 }, etag);
+            await client.TrySaveStateAsync(store, key, value with { Version = 2 }, etag);
         }
 
 
@@ -59,7 +59,7 @@ namespace Dapr.EventStore.Tests
         public async Task LoadReturnsVersion(bool useTransaction)
         {
             store.UseTransaction = useTransaction;
-            _ = await store.AppendToStreamAsync(streamName, 0, new EventData[] { new EventData { Data = "hello 1" } });
+            _ = await store.AppendToStreamAsync(streamName, 0, new EventData[]{ EventData.Create("test", "hello 1") });
             var stream = await store.LoadEventStreamAsync(streamName, 0);
 
             Assert.Equal(1, stream.Version);
@@ -72,9 +72,9 @@ namespace Dapr.EventStore.Tests
         {
             store.UseTransaction = useTransaction;
 
-            await store.AppendToStreamAsync(streamName, 0, new EventData[] { new EventData { Data = "hello 1" } });
-            await store.AppendToStreamAsync(streamName, 1, new EventData[] { new EventData { Data = "hello 2" } });
-            await store.AppendToStreamAsync(streamName, 2, new EventData[] { new EventData { Data = "hello 3" } });
+            await store.AppendToStreamAsync(streamName, 0, new EventData[]{ EventData.Create("test", "hello 1") });
+            await store.AppendToStreamAsync(streamName, 1, new EventData[]{ EventData.Create("test", "hello 2") });
+            await store.AppendToStreamAsync(streamName, 2, new EventData[]{ EventData.Create("test", "hello 3") });
 
             var stream = await store.LoadEventStreamAsync(streamName, 0);
 
@@ -91,10 +91,10 @@ namespace Dapr.EventStore.Tests
 
             await store.AppendToStreamAsync(streamName, 0, new EventData[]
             {
-                new EventData { Data = "hello 1" },
-                new EventData { Data = "hello 2" },
-                new EventData { Data = "hello 3" },
-                new EventData { Data = "hello 4" }
+                EventData.Create("test", "hello 1"),
+                EventData.Create("test", "hello 2"),
+                EventData.Create("test", "hello 3"),
+                EventData.Create("test", "hello 4")
             });
 
             var stream = await store.LoadEventStreamAsync(streamName, 0);
@@ -111,14 +111,14 @@ namespace Dapr.EventStore.Tests
 
             await store.AppendToStreamAsync(streamName, 0, new EventData[]
             {
-                new EventData { Data = "hello 1" },
-                new EventData { Data = "hello 2" },
+                EventData.Create("test", "hello 1"),
+                EventData.Create("test", "hello 2"),
             });
 
             await store.AppendToStreamAsync(streamName, 2, new EventData[]
             {
-                new EventData { Data = "hello 3" },
-                new EventData { Data = "hello 4" }
+                EventData.Create("test", "hello 3"),
+                EventData.Create("test", "hello 4")
             });
 
             var stream = await store.LoadEventStreamAsync(streamName, 0);
@@ -135,14 +135,14 @@ namespace Dapr.EventStore.Tests
 
             await store.AppendToStreamAsync(streamName, 0, new EventData[]
             {
-                new EventData { Data = "hello 1" },
-                new EventData { Data = "hello 2" },
+                EventData.Create("test", "hello 1"),
+                EventData.Create("test", "hello 2"),
             });
 
             await store.AppendToStreamAsync(streamName, 2, new EventData[]
             {
-                new EventData { Data = "hello 3" },
-                new EventData { Data = "hello 4" }
+                EventData.Create("test","hello 3"),
+                EventData.Create("test","hello 4")
             });
 
             var stream = await store.LoadEventStreamAsync(streamName, 1);
@@ -158,7 +158,7 @@ namespace Dapr.EventStore.Tests
         {
             store.UseTransaction = useTransaction;
 
-            var version = await store.AppendToStreamAsync(streamName, 0, new EventData[] { new EventData { Data = "hello 1" } });
+            var version = await store.AppendToStreamAsync(streamName, 0, new EventData[]{ EventData.Create("test", "hello 1") });
 
             Assert.Equal(1, version);
         }
@@ -170,9 +170,9 @@ namespace Dapr.EventStore.Tests
         {
             store.UseTransaction = useTransaction;
 
-            await store.AppendToStreamAsync(streamName, 0, new EventData[] { new EventData { Data = "hello 1" } });
-            await store.AppendToStreamAsync(streamName, 1, new EventData[] { new EventData { Data = "hello 2" } });
-            var version = await store.AppendToStreamAsync(streamName, 2, new EventData[] { new EventData { Data = "hello 3" } });
+            await store.AppendToStreamAsync(streamName, 0, new EventData[]{ EventData.Create("test", "hello 1") });
+            await store.AppendToStreamAsync(streamName, 1, new EventData[]{ EventData.Create("test", "hello 2") });
+            var version = await store.AppendToStreamAsync(streamName, 2, new EventData[]{ EventData.Create("test", "hello 3") });
 
             Assert.Equal(3, version);
         }
@@ -186,8 +186,8 @@ namespace Dapr.EventStore.Tests
 
             await Assert.ThrowsAsync<DBConcurrencyException>(async () =>
             {
-                _ = await store.AppendToStreamAsync(streamName, 0, new EventData[] { new EventData { Data = "hello 1" } });
-                await store.AppendToStreamAsync(streamName, 0, new EventData[] { new EventData { Data = "hello 2" } });
+                _ = await store.AppendToStreamAsync(streamName, 0, new EventData[]{ EventData.Create("test", "hello 1") });
+                await store.AppendToStreamAsync(streamName, 0, new EventData[]{ EventData.Create("test", "hello 2") });
             });
         }
 
@@ -199,10 +199,10 @@ namespace Dapr.EventStore.Tests
             store.UseTransaction = useTransaction;
 
             var versionV1 = await store.AppendToStreamAsync(streamName, 0,
-                new EventData[] { new EventData { Data = "hello 1", EventName = "t" } });
+                new EventData[]{ EventData.Create("t", "hello 1") });
             var streamV1 = await store.LoadEventStreamAsync(streamName, 0);
             var versionV2 = await store.AppendToStreamAsync(streamName, streamV1.Version,
-                new EventData[] { new EventData { Data = "hello 2", EventName = "y" } });
+                new EventData[]{ EventData.Create("y", "hello 2") });
             var streamV2 = await store.LoadEventStreamAsync(streamName, 0);
 
             Assert.Equal(1, streamV1.Version);
@@ -216,8 +216,8 @@ namespace Dapr.EventStore.Tests
         {
             await store.AppendToStreamAsync(streamName, 0, new EventData[]
             {
-                new EventData { Data = "hello 1" },
-                //new EventData { Data = "hello 2" },
+                EventData.Create("test","hello 1"),
+                //EventData.Create { Data = "hello 2" },
             });
 
             var stream = await store.LoadEventStreamAsync(streamName, 1);
