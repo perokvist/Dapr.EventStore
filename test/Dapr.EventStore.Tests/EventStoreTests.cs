@@ -17,12 +17,12 @@ namespace Dapr.EventStore.Tests
         public EventStoreTests()
         {
             client = new StateTestClient();
-            store = new DaprEventStore(client, NullLogger<DaprEventStore>.Instance) {  UseTransaction = false };
+            store = new DaprEventStore(client, NullLogger<DaprEventStore>.Instance);
         }
 
         [Fact]
         public async Task ClientTestAsync()
-        { 
+        {
             await client.SaveStateAsync("testStore", "test", new Widget() { Size = "small", Count = 17, });
         }
 
@@ -33,18 +33,25 @@ namespace Dapr.EventStore.Tests
             public int Count { get; set; }
         }
 
-        [Fact]
-        public async Task LoadReturnsVersion()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task LoadReturnsVersion(bool useTransaction)
         {
+            store.UseTransaction = useTransaction;
             _ = await store.AppendToStreamAsync("test", 0, new EventData[] { new EventData { Data = "hello 1" } });
             var stream = await store.LoadEventStreamAsync("test", 0);
 
             Assert.Equal(1, stream.Version);
         }
 
-        [Fact]
-        public async Task LoadMutipleReturnsVersion()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task LoadMutipleReturnsVersion(bool useTransaction)
         {
+            store.UseTransaction = useTransaction;
+
             await store.AppendToStreamAsync("test", 0, new EventData[] { new EventData { Data = "hello 1" } });
             await store.AppendToStreamAsync("test", 1, new EventData[] { new EventData { Data = "hello 2" } });
             await store.AppendToStreamAsync("test", 2, new EventData[] { new EventData { Data = "hello 3" } });
@@ -54,9 +61,14 @@ namespace Dapr.EventStore.Tests
             Assert.Equal(3, stream.Version);
         }
 
-        [Fact]
-        public async Task LoadArrayReturnsVersion()
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task LoadArrayReturnsVersion(bool useTransaction)
         {
+            store.UseTransaction = useTransaction;
+
             await store.AppendToStreamAsync("test", 0, new EventData[]
             {
                 new EventData { Data = "hello 1" },
@@ -70,9 +82,13 @@ namespace Dapr.EventStore.Tests
             Assert.Equal(4, stream.Version);
         }
 
-        [Fact]
-        public async Task LoadMultipleArraysReturnsVersion()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task LoadMultipleArraysReturnsVersion(bool useTransaction)
         {
+            store.UseTransaction = useTransaction;
+
             await store.AppendToStreamAsync("test", 0, new EventData[]
             {
                 new EventData { Data = "hello 1" },
@@ -90,9 +106,13 @@ namespace Dapr.EventStore.Tests
             Assert.Equal(4, stream.Version);
         }
 
-        [Fact]
-        public async Task LoadMultipleArraysReturnsVersionInSlice()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task LoadMultipleArraysReturnsVersionInSlice(bool useTransaction)
         {
+            store.UseTransaction = useTransaction;
+
             await store.AppendToStreamAsync("test", 0, new EventData[]
             {
                 new EventData { Data = "hello 1" },
@@ -111,17 +131,25 @@ namespace Dapr.EventStore.Tests
             Assert.Equal(3, stream.Events.Count());
         }
 
-        [Fact]
-        public async Task AppendReturnsVersion()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task AppendReturnsVersion(bool useTransaction)
         {
+            store.UseTransaction = useTransaction;
+
             var version = await store.AppendToStreamAsync("test", 0, new EventData[] { new EventData { Data = "hello 1" } });
 
             Assert.Equal(1, version);
         }
 
-        [Fact]
-        public async Task AppendMultipleReturnsVersion()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task AppendMultipleReturnsVersion(bool useTransaction)
         {
+            store.UseTransaction = useTransaction;
+
             await store.AppendToStreamAsync("test", 0, new EventData[] { new EventData { Data = "hello 1" } });
             await store.AppendToStreamAsync("test", 1, new EventData[] { new EventData { Data = "hello 2" } });
             var version = await store.AppendToStreamAsync("test", 2, new EventData[] { new EventData { Data = "hello 3" } });
@@ -129,9 +157,13 @@ namespace Dapr.EventStore.Tests
             Assert.Equal(3, version);
         }
 
-        [Fact]
-        public async Task AppendToWrongVersionThrows()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task AppendToWrongVersionThrows(bool useTransaction)
         {
+            store.UseTransaction = useTransaction;
+
             await Assert.ThrowsAsync<DBConcurrencyException>(async () =>
             {
                 _ = await store.AppendToStreamAsync("test", 0, new EventData[] { new EventData { Data = "hello 1" } });
@@ -139,9 +171,13 @@ namespace Dapr.EventStore.Tests
             });
         }
 
-        [Fact]
-        public async Task AppendAndLoad()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task AppendAndLoad(bool useTransaction)
         {
+            store.UseTransaction = useTransaction;
+
             var versionV1 = await store.AppendToStreamAsync("test", 0,
                 new EventData[] { new EventData { Data = "hello 1" } });
             var streamV1 = await store.LoadEventStreamAsync("test", 0);

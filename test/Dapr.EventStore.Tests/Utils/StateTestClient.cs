@@ -7,6 +7,7 @@ namespace Dapr.Client
 {
     using System;
     using System.Collections.Generic;
+    using System.Linq;
     using System.Net.Http;
     using System.Text.Json;
     using System.Threading;
@@ -28,7 +29,7 @@ namespace Dapr.Client
         {
         }
 
-        
+
 
         public override Task<TValue> GetStateAsync<TValue>(string storeName, string key, ConsistencyMode? consistencyMode = default, IReadOnlyDictionary<string, string> metadata = default, CancellationToken cancellationToken = default)
         {
@@ -37,6 +38,10 @@ namespace Dapr.Client
 
             if (this.State.TryGetValue(key, out var obj))
             {
+                var b = obj as byte[];
+                if (b != null)
+                    return Task.FromResult(JsonSerializer.Deserialize<TValue>(b));
+
                 return Task.FromResult((TValue)obj);
             }
             else
@@ -66,8 +71,10 @@ namespace Dapr.Client
             return Task.FromResult<IReadOnlyList<BulkStateItem>>(response);
         }
 
-        public override Task ExecuteStateTransactionAsync(string storeName, IReadOnlyList<StateTransactionRequest> operations, IReadOnlyDictionary<string, string> metadata = null, CancellationToken cancellationToken = default)
-             => Task.CompletedTask;
+        public override async Task ExecuteStateTransactionAsync(string storeName, IReadOnlyList<StateTransactionRequest> operations, IReadOnlyDictionary<string, string> metadata = null, CancellationToken cancellationToken = default)
+        {
+            await Task.WhenAll(operations.Select(x => SaveStateAsync(storeName, x.Key, x.Value, x.Options, metadata, cancellationToken)));
+        }
 
         public override async Task<bool> TrySaveStateAsync<TValue>(string storeName, string key, TValue value, string etag, StateOptions stateOptions = null, IReadOnlyDictionary<string, string> metadata = null, CancellationToken cancellationToken = default)
         {
@@ -88,6 +95,9 @@ namespace Dapr.Client
 
             if (this.State.TryGetValue(key, out var obj))
             {
+                if (obj is byte[] b)
+                    return Task.FromResult((JsonSerializer.Deserialize<TValue>(b), "test_etag"));
+
                 return Task.FromResult(((TValue)obj, "test_etag"));
             }
             else
