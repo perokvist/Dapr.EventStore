@@ -1,4 +1,5 @@
-using Microsoft.Extensions.Logging;
+using Dapr.Client;
+using Grpc.Net.Client;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Data;
 using System.Linq;
@@ -9,13 +10,27 @@ namespace Dapr.EventStore.Tests
 {
     public class EventStoreTests
     {
-        private readonly StateTestClient client;
+        //private readonly DaprClient daprClient;
+        private StateTestClient client;
         private readonly DaprEventStore store;
 
         public EventStoreTests()
         {
             client = new StateTestClient();
-            store = new DaprEventStore(client, NullLogger<DaprEventStore>.Instance);
+            store = new DaprEventStore(client, NullLogger<DaprEventStore>.Instance) {  UseTransaction = false };
+        }
+
+        [Fact]
+        public async Task ClientTestAsync()
+        { 
+            await client.SaveStateAsync("testStore", "test", new Widget() { Size = "small", Count = 17, });
+        }
+
+        public class Widget
+        {
+            public string Size { get; set; }
+
+            public int Count { get; set; }
         }
 
         [Fact]

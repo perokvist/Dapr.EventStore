@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Dapr.Client;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -39,8 +40,8 @@ namespace Dapr.EventStore
         public async Task<long> AppendToStreamAsync(string streamName, Action<StreamHead> concurrencyGuard, params EventData[] events)
         {
             var streamHeadKey = $"{streamName}|head";
-            var (head, headetag) = await client.GetStateAndETagAsync<StreamHead>(StoreName, streamHeadKey);
             var meta = MetaProvider(streamName);
+            var (head, headetag) = await client.GetStateAndETagAsync<StreamHead>(StoreName, streamHeadKey, metadata: meta);
 
             if (head == null)
                 head = new StreamHead();
@@ -56,7 +57,7 @@ namespace Dapr.EventStore
                 .ToArray();
 
             var sliceKey = $"{streamName}|{newVersion}";
-            var (slice, sliceetag) = await client.GetStateAndETagAsync<EventData[]>(StoreName, sliceKey);
+            var (slice, sliceetag) = await client.GetStateAndETagAsync<EventData[]>(StoreName, sliceKey, metadata : meta);
             if (slice != null)
                 throw new DBConcurrencyException($"Event slice {sliceKey} ending with event version {newVersion} already exists");
 
@@ -92,7 +93,8 @@ namespace Dapr.EventStore
 
         public async Task<(IEnumerable<EventData> Events, long Version)> LoadEventStreamAsync(string streamName, long version)
         {
-            var head = await client.GetStateEntryAsync<StreamHead>(StoreName, $"{streamName}|head");
+            var meta = MetaProvider(streamName);
+            var head = await client.GetStateEntryAsync<StreamHead>(StoreName, $"{streamName}|head", metadata: meta);
 
             if (head.Value == null)
                 return (Enumerable.Empty<EventData>(), new StreamHead().Version);
@@ -106,7 +108,7 @@ namespace Dapr.EventStore
                 while (next != 0 && next > version)
                 {
                     var sliceKey = $"{streamName}|{next}";
-                    var slice = await client.GetStateAsync<EventData[]>(StoreName, sliceKey);
+                    var slice = await client.GetStateAsync<EventData[]>(StoreName, sliceKey, metadata: meta);
 
                     logger.LogDebug("Slice {sliceKey} loaded range : {firstVersion} - {lastVersion}", sliceKey, slice.First().Version, slice.Last().Version);
                     next = slice.First().Version - 1;
