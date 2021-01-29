@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
-    <VersionPrefix>1.0.3</VersionPrefix>
+    <VersionPrefix>0.11.3</VersionPrefix>
     <VersionSuffix>alpha</VersionSuffix>
     <PackageId>Dapr.EventStore</PackageId>
     <Title>Dapr.EventStore</Title>

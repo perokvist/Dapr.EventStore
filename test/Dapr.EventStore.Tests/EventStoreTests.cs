@@ -1,5 +1,4 @@
 using Dapr.Client;
-using Grpc.Net.Client;
 using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.Collections.Generic;
@@ -18,7 +17,7 @@ namespace Dapr.EventStore.Tests
 
         public EventStoreTests()
         {
-            //Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50000");
+            Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50000");
             var inDapr = Environment.GetEnvironmentVariable("DAPR_GRPC_PORT") != null;
 
             if (inDapr)
@@ -47,10 +46,12 @@ namespace Dapr.EventStore.Tests
         {
             var store = "localcosmos";
             var key = Guid.NewGuid().ToString().Substring(0, 5);
-            await client.SaveStateAsync(store, key, EventData.Create("test", "testing", 1));
+            await client.SaveStateAsync(store, key, EventData.Create("test", new byte[10] , 1));
             var (value, etag) = await client.GetStateAndETagAsync<EventData>(store, key);
             await client.TrySaveStateAsync(store, key, value with { Version = 2 }, etag);
         }
+
+        public record TestEvent(string Id, string Title);
 
 
         [Theory]
