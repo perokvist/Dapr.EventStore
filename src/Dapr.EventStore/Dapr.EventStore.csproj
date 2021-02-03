@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
-    <VersionPrefix>0.11.3</VersionPrefix>
-    <VersionSuffix>alpha</VersionSuffix>
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <VersionSuffix>rc5.alpha1</VersionSuffix>
     <PackageId>Dapr.EventStore</PackageId>
     <Title>Dapr.EventStore</Title>
     <Authors>Per Ökvist</Authors>
