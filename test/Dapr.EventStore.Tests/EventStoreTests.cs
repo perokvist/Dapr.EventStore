@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -17,7 +18,7 @@ namespace Dapr.EventStore.Tests
 
         public EventStoreTests()
         {
-            Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50000");
+            //Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50000");
             var inDapr = Environment.GetEnvironmentVariable("DAPR_GRPC_PORT") != null;
 
             if (inDapr)
@@ -46,9 +47,22 @@ namespace Dapr.EventStore.Tests
         {
             var store = "statestore";
             var key = Guid.NewGuid().ToString().Substring(0, 5);
-            await client.SaveStateAsync(store, key, EventData.Create("test", new byte[10] , 1));
+            await client.SaveStateAsync(store, key, EventData.Create("test", new TestEvent("id", "hey") , 1));
             var (value, etag) = await client.GetStateAndETagAsync<EventData>(store, key);
             await client.TrySaveStateAsync(store, key, value with { Version = 2 }, etag); 
+        }
+
+        [Theory]
+        [InlineData("statestore")]
+        [InlineData("localcosmos")]
+        [Trait("Category", "Integration")]
+        public async Task ByteVsJsonCheckAsync(string store)
+        {
+            var key = Guid.NewGuid().ToString().Substring(0, 5);
+            var @event = EventData.Create("test", new TestEvent("id", "hey"));
+            var req = new StateTransactionRequest(key, JsonSerializer.SerializeToUtf8Bytes(@event), StateOperationType.Upsert);
+            await client.ExecuteStateTransactionAsync(store, new[] { req });
+            var (value, etag) = await client.GetStateAndETagAsync<EventData>(store, key);
         }
 
         public record TestEvent(string Id, string Title);

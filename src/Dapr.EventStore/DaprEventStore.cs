@@ -73,8 +73,8 @@ namespace Dapr.EventStore
 
             var task = Mode switch
             {
-                SliceMode.Off => StateTransaction2(streamName, streamHeadKey, head, headetag, meta, versionedEvents),
-                SliceMode.Transactional => StateTransaction(streamHeadKey, head, headetag, meta, versionedEvents, sliceKey, sliceetag),
+                SliceMode.Off => StateTransaction(streamName, streamHeadKey, head, headetag, meta, versionedEvents),
+                SliceMode.Transactional => StateTransactionSlice(streamHeadKey, head, headetag, meta, versionedEvents, sliceKey, sliceetag),
                 SliceMode.TwoPhased => TwoPhased(streamHeadKey, head, headetag, meta, newVersion, versionedEvents, sliceKey, sliceetag),
                 _ => throw new Exception("Mode not supported")
             };
@@ -82,7 +82,7 @@ namespace Dapr.EventStore
             await task;
             return newVersion;
 
-            async Task StateTransaction(string streamHeadKey, StreamHead head, string headetag, Dictionary<string, string> meta, EventData[] versionedEvents, string sliceKey, string sliceetag)
+            async Task StateTransactionSlice(string streamHeadKey, StreamHead head, string headetag, Dictionary<string, string> meta, EventData[] versionedEvents, string sliceKey, string sliceetag)
             {
                 var sliceReq = new StateTransactionRequest(sliceKey, JsonSerializer.SerializeToUtf8Bytes(versionedEvents), Client.StateOperationType.Upsert, string.IsNullOrWhiteSpace(sliceetag) ? null : sliceetag, metadata: meta);
                 var headReq = new StateTransactionRequest(streamHeadKey, JsonSerializer.SerializeToUtf8Bytes(head), Client.StateOperationType.Upsert, etag: string.IsNullOrWhiteSpace(headetag) ? null : headetag, metadata: meta);
@@ -102,7 +102,7 @@ namespace Dapr.EventStore
                     throw new DBConcurrencyException($"stream head {streamHeadKey} have been updated");
             }
 
-            async Task StateTransaction2(string streamName, string streamHeadKey, StreamHead head, string headetag, Dictionary<string, string> meta, EventData[] versionedEvents)
+            async Task StateTransaction(string streamName, string streamHeadKey, StreamHead head, string headetag, Dictionary<string, string> meta, EventData[] versionedEvents)
             {
                 var eventsReq = versionedEvents.Select(x => new StateTransactionRequest($"{streamName}|{x.Version}", JsonSerializer.SerializeToUtf8Bytes(x), StateOperationType.Upsert, metadata: meta));
                 var headReq = new StateTransactionRequest(streamHeadKey, JsonSerializer.SerializeToUtf8Bytes(head), Client.StateOperationType.Upsert, etag: string.IsNullOrWhiteSpace(headetag) ? null : headetag, metadata: meta);
@@ -177,7 +177,11 @@ namespace Dapr.EventStore
             }
         }
 
-        public record StreamHead(long Version = 0);
+        public record StreamHead(long Version = 0)
+        {
+            public StreamHead() : this(0)
+            { }
+        }
 
         public class Concurrency
         {
