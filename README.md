@@ -1,5 +1,3 @@
-![.NET Core](https://github.com/perokvist/Dapr.EventStore/workflows/.NET%20Core/badge.svg)
-
 # Dapr.EventStore
 Demo implementation of an naive EventStore with DaprClient (as feedback)
 
@@ -24,4 +22,5 @@ Or should the Actor approach be used, and use another key scheme, and then the s
 
 TBD.
 
-Actor follow a different [key scheme](https://github.com/dapr/docs/blob/master/reference/api/state_api.md#key-scheme), that might allow a compontent to support a multi-operation, and easier implementation of query by state key *.
+Actor follow a different [key scheme](https://github.com/dapr/docs/blob/master/reference/api/state_api.md#key-scheme), that might allow a compontent to support a multi-operation, and eiser implementation of query by state key *.
+
