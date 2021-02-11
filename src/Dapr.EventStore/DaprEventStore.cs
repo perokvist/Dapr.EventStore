@@ -1,10 +1,8 @@
-﻿using Dapr.Client;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Dapr.EventStore
@@ -73,45 +71,14 @@ namespace Dapr.EventStore
 
             var task = Mode switch
             {
-                SliceMode.Off => StateTransaction(streamName, streamHeadKey, head, headetag, meta, versionedEvents),
-                SliceMode.Transactional => StateTransactionSlice(streamHeadKey, head, headetag, meta, versionedEvents, sliceKey, sliceetag),
-                SliceMode.TwoPhased => TwoPhased(streamHeadKey, head, headetag, meta, newVersion, versionedEvents, sliceKey, sliceetag),
+                SliceMode.Off => client.StateTransactionAsync(StoreName, streamName, streamHeadKey, head, headetag, meta, versionedEvents),
+                SliceMode.Transactional => client.StateTransactionSliceAsync(StoreName, streamHeadKey, head, headetag, meta, versionedEvents, sliceKey, sliceetag),
+                SliceMode.TwoPhased => client.TwoPhasedAsync(StoreName, streamHeadKey, head, headetag, meta, newVersion, versionedEvents, sliceKey, sliceetag),
                 _ => throw new Exception("Mode not supported")
             };
 
             await task;
             return newVersion;
-
-            async Task StateTransactionSlice(string streamHeadKey, StreamHead head, string headetag, Dictionary<string, string> meta, EventData[] versionedEvents, string sliceKey, string sliceetag)
-            {
-                var sliceReq = new StateTransactionRequest(sliceKey, JsonSerializer.SerializeToUtf8Bytes(versionedEvents), Client.StateOperationType.Upsert, string.IsNullOrWhiteSpace(sliceetag) ? null : sliceetag, metadata: meta);
-                var headReq = new StateTransactionRequest(streamHeadKey, JsonSerializer.SerializeToUtf8Bytes(head), Client.StateOperationType.Upsert, etag: string.IsNullOrWhiteSpace(headetag) ? null : headetag, metadata: meta);
-                var reqs = new List<StateTransactionRequest> { sliceReq, headReq };
-
-                await client.ExecuteStateTransactionAsync(StoreName, reqs, meta);
-            }
-
-            async Task TwoPhased(string streamHeadKey, StreamHead head, string headetag, Dictionary<string, string> meta, long newVersion, EventData[] versionedEvents, string sliceKey, string sliceetag)
-            {
-                var sliceWriteSuccess = await client.TrySaveStateAsync(StoreName, sliceKey, versionedEvents, sliceetag, metadata: meta);
-                if (!sliceWriteSuccess)
-                    throw new DBConcurrencyException($"Error writing events. Event slice {sliceKey} ending with event version {newVersion} already exists");
-
-                var headWriteSuccess = await client.TrySaveStateAsync(StoreName, streamHeadKey, head, headetag, metadata: meta);
-                if (!headWriteSuccess)
-                    throw new DBConcurrencyException($"stream head {streamHeadKey} have been updated");
-            }
-
-            async Task StateTransaction(string streamName, string streamHeadKey, StreamHead head, string headetag, Dictionary<string, string> meta, EventData[] versionedEvents)
-            {
-                var eventsReq = versionedEvents.Select(x => new StateTransactionRequest($"{streamName}|{x.Version}", JsonSerializer.SerializeToUtf8Bytes(x), StateOperationType.Upsert, metadata: meta));
-                var headReq = new StateTransactionRequest(streamHeadKey, JsonSerializer.SerializeToUtf8Bytes(head), Client.StateOperationType.Upsert, etag: string.IsNullOrWhiteSpace(headetag) ? null : headetag, metadata: meta);
-                var reqs = new List<StateTransactionRequest>();
-                reqs.AddRange(eventsReq);
-                reqs.Add(headReq);
-
-                await client.ExecuteStateTransactionAsync(StoreName, reqs, meta);
-            }
         }
 
         public async Task<(IEnumerable<EventData> Events, long Version)> LoadEventStreamAsync(string streamName, long version)
@@ -125,56 +92,9 @@ namespace Dapr.EventStore
             var eventSlices = new List<EventData[]>();
 
             if (Mode == SliceMode.Off)
-            {
-                var keys = Enumerable
-                    .Range(version == default ? 1 : (int)version, (int)(head.Value.Version - version))
-                    .Select(x => $"{streamName}|{x}")
-                    .ToList();
+                return await client.LoadBulkEventsAsync(StoreName, streamName, version, meta, head);
 
-                if (!keys.Any())
-                    return (Enumerable.Empty<EventData>(), new StreamHead().Version);
-
-                var events = (await client.GetBulkStateAsync(StoreName, keys, null, metadata: meta))
-                    .Select(x => JsonSerializer.Deserialize<EventData>(x.Value))
-                    .OrderBy(x => x.Version);
-
-                return (events, events.LastOrDefault()?.Version ?? head.Value.Version);
-            }
-
-
-            using (logger.BeginScope("Loading head {streamName}. Starting version {version}", head.Key, head.Value.Version))
-            {
-                var next = head.Value.Version;
-
-                while (next != 0 && next >= version)
-                {
-                    var sliceKey = $"{streamName}|{next}";
-                    var slice = await client.GetStateAsync<EventData[]>(StoreName, sliceKey, metadata: meta);
-
-                    logger.LogDebug("Slice {sliceKey} loaded range : {firstVersion} - {lastVersion}", sliceKey, slice.First().Version, slice.Last().Version);
-                    next = slice.First().Version - 1;
-
-                    if (next < version)
-                    {
-                        logger.LogDebug("Version within slice. Next : {next}. Version : {version}", next, version);
-                        eventSlices.Add(slice.Where(e => e.Version >= version).ToArray());
-                        break;
-                    }
-
-                    logger.LogDebug("Adding slice. Next : {next}. Version : {version}", next, version);
-
-                    eventSlices.Add(slice);
-                }
-
-                logger.LogDebug("Done reading. Got {sliceCount} slices.", eventSlices.Count());
-
-                var events = eventSlices
-                    .Reverse<EventData[]>()
-                    .SelectMany(e => e)
-                    .ToArray();
-
-                return (events, events.LastOrDefault()?.Version ?? head.Value.Version);
-            }
+            return await client.LoadSlicesAsync(StoreName, logger, streamName, version, meta, head, eventSlices);
         }
 
         public record StreamHead(long Version = 0)
