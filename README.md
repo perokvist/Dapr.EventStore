@@ -1,3 +1,6 @@
+[![NuGet Version and Downloads count](https://buildstats.info/nuget/Dapr.EventStore?includePreReleases=true)](https://www.nuget.org/packages/Dapr.EventStore/)
+![Build](https://github.com/perokvist/Dapr.EventStore/workflows/.NET%20Core/badge.svg)
+
 # Dapr.EventStore
 Demo implementation of an naive EventStore with DaprClient (as feedback)
 
