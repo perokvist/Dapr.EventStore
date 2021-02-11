@@ -45,7 +45,7 @@ namespace Dapr.EventStore.Tests
         [Fact]
         public async Task ProtoEtagCheckAsync()
         {
-            var store = "statestore";
+            var store = "localcosmos";
             var key = Guid.NewGuid().ToString().Substring(0, 5);
             await client.SaveStateAsync(store, key, EventData.Create("test", new TestEvent("id", "hey") , 1));
             var (value, etag) = await client.GetStateAndETagAsync<EventData>(store, key);
@@ -177,7 +177,7 @@ namespace Dapr.EventStore.Tests
                 EventData.Create("test","hello 4")
             });
 
-            var stream = await store.LoadEventStreamAsync(streamName, 1);
+            var stream = await store.LoadEventStreamAsync(streamName, 2);
 
             Assert.Equal(4, stream.Events.Last().Version);
             Assert.Equal(3, stream.Events.Count());

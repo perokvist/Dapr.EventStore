@@ -127,7 +127,7 @@ namespace Dapr.EventStore
             if (Mode == SliceMode.Off)
             {
                 var keys = Enumerable
-                    .Range(version == default ? 1 : (int)version + 1, (int)(head.Value.Version - version))
+                    .Range(version == default ? 1 : (int)version, (int)(head.Value.Version - version))
                     .Select(x => $"{streamName}|{x}")
                     .ToList();
 
@@ -146,7 +146,7 @@ namespace Dapr.EventStore
             {
                 var next = head.Value.Version;
 
-                while (next != 0 && next > version)
+                while (next != 0 && next >= version)
                 {
                     var sliceKey = $"{streamName}|{next}";
                     var slice = await client.GetStateAsync<EventData[]>(StoreName, sliceKey, metadata: meta);
@@ -157,7 +157,7 @@ namespace Dapr.EventStore
                     if (next < version)
                     {
                         logger.LogDebug("Version within slice. Next : {next}. Version : {version}", next, version);
-                        eventSlices.Add(slice.Where(e => e.Version > version).ToArray());
+                        eventSlices.Add(slice.Where(e => e.Version >= version).ToArray());
                         break;
                     }
 
