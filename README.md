@@ -1,4 +1,4 @@
-[![NuGet Version and Downloads count](https://buildstats.info/nuget/Dapr.EventStore?includePreReleases=true)](https://www.nuget.org/packages/Dapr.EventStore/)
+[![NuGet Version and Downloads count](https://buildstats.info/nuget/StateStore.Dapr.EventStore?includePreReleases=true)](https://www.nuget.org/packages/StateStore.Dapr.EventStore/)
 ![Build](https://github.com/perokvist/Dapr.EventStore/workflows/.NET%20Core/badge.svg)
 
 # Dapr.EventStore
