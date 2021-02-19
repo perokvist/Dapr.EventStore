@@ -18,7 +18,7 @@ namespace Dapr.EventStore.Tests
 
         public EventStoreTests()
         {
-            //Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50000");
+            Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50000");
             var inDapr = Environment.GetEnvironmentVariable("DAPR_GRPC_PORT") != null;
 
             if (inDapr)
@@ -112,7 +112,7 @@ namespace Dapr.EventStore.Tests
         }
 
         [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off, Skip = "Byte bug")]
+        [InlineData(DaprEventStore.SliceMode.Off)]
         [InlineData(DaprEventStore.SliceMode.TwoPhased)]
         [InlineData(DaprEventStore.SliceMode.Transactional)]
         public async Task LoadArrayReturnsVersion(DaprEventStore.SliceMode sliceMode)
@@ -133,7 +133,7 @@ namespace Dapr.EventStore.Tests
         }
 
         [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off, Skip = "Byte bug")]
+        [InlineData(DaprEventStore.SliceMode.Off)]
         [InlineData(DaprEventStore.SliceMode.TwoPhased)]
         [InlineData(DaprEventStore.SliceMode.Transactional)]
         public async Task LoadMultipleArraysReturnsVersion(DaprEventStore.SliceMode sliceMode)
@@ -158,7 +158,7 @@ namespace Dapr.EventStore.Tests
         }
 
         [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off, Skip = "Byte bug")]
+        [InlineData(DaprEventStore.SliceMode.Off)]
         [InlineData(DaprEventStore.SliceMode.TwoPhased)]
         [InlineData(DaprEventStore.SliceMode.Transactional)]
         public async Task LoadMultipleArraysReturnsVersionInSlice(DaprEventStore.SliceMode sliceMode)

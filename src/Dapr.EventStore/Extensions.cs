@@ -57,7 +57,8 @@ namespace Dapr.EventStore
             string streamName, long version, Dictionary<string, string> meta, StateEntry<StreamHead> head)
         {
             var keys = Enumerable
-                .Range(version == default ? 1 : (int)version, (int)(head.Value.Version - version))
+                .Range(version == default ? 1 : (int)version, (int)(head.Value.Version) + (version == default ? default : 1))
+                .Where(x => x <= head.Value.Version)
                 .Select(x => $"{streamName}|{x}")
                 .ToList();
 
