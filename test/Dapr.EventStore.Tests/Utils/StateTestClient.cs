@@ -9,6 +9,7 @@ namespace Dapr.Client
     using System.Collections.Generic;
     using System.Linq;
     using System.Net.Http;
+    using System.Text;
     using System.Text.Json;
     using System.Threading;
     using System.Threading.Tasks;
@@ -60,7 +61,7 @@ namespace Dapr.Client
             {
                 if (this.State.TryGetValue(key, out var obj))
                 {
-                    response.Add(new BulkStateItem(key, obj.ToString(), ""));
+                    response.Add(new BulkStateItem(key, Encoding.UTF8.GetString(obj as byte[]), ""));
                 }
                 else
                 {
