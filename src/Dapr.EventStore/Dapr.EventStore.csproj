@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
     <VersionPrefix>1.0.0</VersionPrefix>
-    <VersionSuffix>alpha4</VersionSuffix>
+    <VersionSuffix>sdk-alpha.5</VersionSuffix>
     <PackageId>StateStore.Dapr.EventStore</PackageId>
     <Title>StateStore.Dapr.EventStore</Title>
     <Authors>Per Ökvist</Authors>
