@@ -45,7 +45,7 @@ namespace Dapr.EventStore
 
         public async Task<long> AppendToStreamAsync(string streamName, Action<StreamHead> concurrencyGuard, params EventData[] events)
         {
-            var streamHeadKey = $"{streamName}|head";
+            var streamHeadKey = Naming.StreamHead(streamName);
             var meta = MetaProvider(streamName);
             var (head, headetag) = await client.GetStateAndETagAsync<StreamHead>(StoreName, streamHeadKey, metadata: meta);
 
@@ -62,7 +62,7 @@ namespace Dapr.EventStore
                 .Select((e, i) => new EventData(e.EventId, e.EventName, e.Data, head.Version + (i + 1)))
                 .ToArray();
 
-            var sliceKey = $"{streamName}|{newVersion}";
+            var sliceKey = Naming.StreamKey(streamName, newVersion);
             var (slice, sliceetag) = await client.GetStateAndETagAsync<EventData[]>(StoreName, sliceKey, metadata: meta);
             if (slice != null)
                 throw new DBConcurrencyException($"Event slice {sliceKey} ending with event version {newVersion} already exists");
