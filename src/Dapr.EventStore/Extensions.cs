@@ -111,10 +111,11 @@ namespace Dapr.EventStore
             await client.ExecuteStateTransactionAsync(storeName, reqs, meta);
         }
 
+
         public static T EventAs<T>(this EventData eventData)
          => eventData.Data switch
             {
-                JsonElement d => d.ToObject<T>(),
+                JsonElement d => d.ToObject<T>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }),
                 T d => d,
                 _ => throw new Exception($"Data was not of type {typeof(T).Name}")
             };
@@ -124,7 +125,8 @@ namespace Dapr.EventStore
             var bufferWriter = new ArrayBufferWriter<byte>();
             using (var writer = new Utf8JsonWriter(bufferWriter))
                 element.WriteTo(writer);
-            return JsonSerializer.Deserialize<T>(bufferWriter.WrittenSpan, options);
+            var result = JsonSerializer.Deserialize<T>(bufferWriter.WrittenSpan, options);
+            return result;
         }
 
     }

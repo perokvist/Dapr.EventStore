@@ -18,7 +18,7 @@ namespace Dapr.EventStore.Tests
 
         public EventStoreTests()
         {
-            //Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50000");
+            Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50001");
             var inDapr = Environment.GetEnvironmentVariable("DAPR_GRPC_PORT") != null;
 
             if (inDapr)
