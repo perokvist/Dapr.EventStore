@@ -3,8 +3,9 @@
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
     <VersionPrefix>1.0.0</VersionPrefix>
-    <VersionSuffix>rtm-alpha.5</VersionSuffix>
+    <VersionSuffix>rtm-alpha.7</VersionSuffix>
     <PackageId>StateStore.Dapr.EventStore</PackageId>
+    <Description>A naive event store on top of dapr state store</Description>
     <Title>StateStore.Dapr.EventStore</Title>
     <Authors>Per Ökvist</Authors>
     <PackageLicenseExpression>MS-PL</PackageLicenseExpression>

@@ -23,7 +23,9 @@ namespace Dapr.EventStore.Tests
 
             if (inDapr)
             {
-                client = new DaprClientBuilder().Build();
+                client = new DaprClientBuilder()
+                    .Build();
+
                 store = new DaprEventStore(client, NullLogger<DaprEventStore>.Instance)
                 {
                     StoreName = "statestore",
@@ -82,7 +84,21 @@ namespace Dapr.EventStore.Tests
         public record TestEvent(string Id, string Title);
 
         [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off, Skip ="Byte bug")]
+        [InlineData(DaprEventStore.SliceMode.Off)]
+        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+        [InlineData(DaprEventStore.SliceMode.Transactional)]
+        public async Task LoadReturnsDeserialized(DaprEventStore.SliceMode sliceMode)
+        {
+            store.Mode = sliceMode;
+            var @event = EventData.Create("test", new TestEvent("id", "hey"));
+            _ = await store.AppendToStreamAsync(streamName, 0, new EventData[] { @event });
+            var stream = await store.LoadEventStreamAsync(streamName, 0);
+
+            Assert.Equal("hey", stream.Events.First().EventAs<TestEvent>().Title);
+        }
+
+        [Theory]
+        [InlineData(DaprEventStore.SliceMode.Off)]
         [InlineData(DaprEventStore.SliceMode.TwoPhased)]
         [InlineData(DaprEventStore.SliceMode.Transactional)]
         public async Task LoadReturnsVersion(DaprEventStore.SliceMode sliceMode)
@@ -95,7 +111,7 @@ namespace Dapr.EventStore.Tests
         }
 
         [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off, Skip="Byte bug")]
+        [InlineData(DaprEventStore.SliceMode.Off)]
         [InlineData(DaprEventStore.SliceMode.TwoPhased)]
         [InlineData(DaprEventStore.SliceMode.Transactional)]
         public async Task LoadMutipleReturnsVersion(DaprEventStore.SliceMode sliceMode)
@@ -227,7 +243,7 @@ namespace Dapr.EventStore.Tests
         }
 
         [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off, Skip="Byte bug")]
+        [InlineData(DaprEventStore.SliceMode.Off)]
         [InlineData(DaprEventStore.SliceMode.TwoPhased)]
         [InlineData(DaprEventStore.SliceMode.Transactional)]
         public async Task AppendAndLoad(DaprEventStore.SliceMode sliceMode)

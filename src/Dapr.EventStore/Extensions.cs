@@ -1,6 +1,7 @@
 ﻿using Dapr.Client;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -23,7 +24,7 @@ namespace Dapr.EventStore
 
                 while (next != 0 && next >= version)
                 {
-                    var sliceKey = $"{streamName}|{next}";
+                    var sliceKey = Naming.StreamKey(streamName, next);
                     var slice = await client.GetStateAsync<EventData[]>(storeName, sliceKey, metadata: meta);
 
                     logger.LogDebug("Slice {sliceKey} loaded range : {firstVersion} - {lastVersion}", sliceKey, slice.First().Version, slice.Last().Version);
@@ -59,7 +60,7 @@ namespace Dapr.EventStore
             var keys = Enumerable
                 .Range(version == default ? 1 : (int)version, (int)(head.Value.Version) + (version == default ? default : 1))
                 .Where(x => x <= head.Value.Version)
-                .Select(x => $"{streamName}|{x}")
+                .Select(x => Naming.StreamKey(streamName, x))
                 .ToList();
 
             if (!keys.Any())
@@ -101,13 +102,29 @@ namespace Dapr.EventStore
             string storeName,
             string streamName, string streamHeadKey, StreamHead head, string headetag, Dictionary<string, string> meta, EventData[] versionedEvents)
         {
-            var eventsReq = versionedEvents.Select(x => new StateTransactionRequest($"{streamName}|{x.Version}", JsonSerializer.SerializeToUtf8Bytes(x), StateOperationType.Upsert, metadata: meta));
+            var eventsReq = versionedEvents.Select(x => new StateTransactionRequest(Naming.StreamKey(streamName, x.Version), JsonSerializer.SerializeToUtf8Bytes(x), StateOperationType.Upsert, metadata: meta));
             var headReq = new StateTransactionRequest(streamHeadKey, JsonSerializer.SerializeToUtf8Bytes(head), Client.StateOperationType.Upsert, etag: string.IsNullOrWhiteSpace(headetag) ? null : headetag, metadata: meta);
             var reqs = new List<StateTransactionRequest>();
             reqs.AddRange(eventsReq);
             reqs.Add(headReq);
 
             await client.ExecuteStateTransactionAsync(storeName, reqs, meta);
+        }
+
+        public static T EventAs<T>(this EventData eventData)
+         => eventData.Data switch
+            {
+                JsonElement d => d.ToObject<T>(),
+                T d => d,
+                _ => throw new Exception($"Data was not of type {typeof(T).Name}")
+            };
+
+        public static T ToObject<T>(this JsonElement element, JsonSerializerOptions options = null)
+        {
+            var bufferWriter = new ArrayBufferWriter<byte>();
+            using (var writer = new Utf8JsonWriter(bufferWriter))
+                element.WriteTo(writer);
+            return JsonSerializer.Deserialize<T>(bufferWriter.WrittenSpan, options);
         }
 
     }
