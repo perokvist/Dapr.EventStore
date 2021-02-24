@@ -18,7 +18,7 @@ namespace Dapr.EventStore.Tests
 
         public EventStoreTests()
         {
-            //Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50001");
+            Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50001");
             var inDapr = Environment.GetEnvironmentVariable("DAPR_GRPC_PORT") != null;
 
             if (inDapr)
@@ -100,7 +100,7 @@ namespace Dapr.EventStore.Tests
             _ = await store.AppendToStreamAsync(streamName, 0, new EventData[] { @event });
             var stream = await store.LoadEventStreamAsync(streamName, 0);
 
-            Assert.Equal("hey", stream.Events.First().EventAs<TestEvent>().Title);
+            Assert.Equal("hey", stream.Events.First().EventAs<TestEvent>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }).Title);
         }
 
         [Theory]
@@ -114,7 +114,7 @@ namespace Dapr.EventStore.Tests
             _ = await store.AppendToStreamAsync(streamName, 0, new EventData[] { @event });
             var stream = await store.LoadEventStreamAsync(streamName, 0);
 
-            Assert.Equal("hey", stream.Events.First().EventAs<Envelope<TestEvent>>().Event.Title);
+            Assert.Equal("hey", stream.Events.First().EventAs<Envelope<TestEvent>>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }).Event.Title);
         }
 
         [Theory]
