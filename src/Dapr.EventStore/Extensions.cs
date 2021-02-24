@@ -112,10 +112,10 @@ namespace Dapr.EventStore
         }
 
 
-        public static T EventAs<T>(this EventData eventData)
+        public static T EventAs<T>(this EventData eventData, JsonSerializerOptions options = null)
          => eventData.Data switch
             {
-                JsonElement d => d.ToObject<T>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }),
+                JsonElement d => d.ToObject<T>(options),
                 T d => d,
                 _ => throw new Exception($"Data was not of type {typeof(T).Name}")
             };

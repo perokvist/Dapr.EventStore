@@ -83,6 +83,12 @@ namespace Dapr.EventStore.Tests
 
         public record TestEvent(string Id, string Title);
 
+        public class Envelope<T>
+        {
+            public string Messsage { get; set; }
+            public T Event { get; set; }
+        }
+
         [Theory]
         [InlineData(DaprEventStore.SliceMode.Off)]
         [InlineData(DaprEventStore.SliceMode.TwoPhased)]
@@ -95,6 +101,20 @@ namespace Dapr.EventStore.Tests
             var stream = await store.LoadEventStreamAsync(streamName, 0);
 
             Assert.Equal("hey", stream.Events.First().EventAs<TestEvent>().Title);
+        }
+
+        [Theory]
+        [InlineData(DaprEventStore.SliceMode.Off)]
+        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+        [InlineData(DaprEventStore.SliceMode.Transactional)]
+        public async Task LoadReturnsDeserializedEnvelope(DaprEventStore.SliceMode sliceMode)
+        {
+            store.Mode = sliceMode;
+            var @event = EventData.Create("test", new Envelope<TestEvent> { Event = new TestEvent("id", "hey"), Messsage = "test" });
+            _ = await store.AppendToStreamAsync(streamName, 0, new EventData[] { @event });
+            var stream = await store.LoadEventStreamAsync(streamName, 0);
+
+            Assert.Equal("hey", stream.Events.First().EventAs<Envelope<TestEvent>>().Event.Title);
         }
 
         [Theory]
