@@ -24,6 +24,7 @@ namespace Dapr.EventStore.Tests
             if (inDapr)
             {
                 client = new DaprClientBuilder()
+                    .UseJsonSerializationOptions(new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     .Build();
 
                 store = new DaprEventStore(client, NullLogger<DaprEventStore>.Instance)
