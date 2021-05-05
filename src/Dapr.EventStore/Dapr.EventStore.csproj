@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
-    <VersionPrefix>1.1.0</VersionPrefix>
+    <VersionPrefix>1.1.1</VersionPrefix>
     <VersionSuffix>alpha.1</VersionSuffix>
     <PackageId>StateStore.Dapr.EventStore</PackageId>
     <Description>A naive event store on top of dapr state store</Description>
@@ -15,10 +15,11 @@
     <Platform>x64</Platform>
     <PlatformTarget>x64</PlatformTarget>
     <RepositoryUrl>https://github.com/perokvist/Dapr.EventStore</RepositoryUrl>
+    <PackageIconUrl>https://github.com/perokvist/Dapr.EventStore/raw/master/dapr_eventstore.ico</PackageIconUrl>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Dapr.Client" Version="1.1.0" />
+    <PackageReference Include="Dapr.Client" Version="1.1.1" />
   </ItemGroup>
 
 </Project>
