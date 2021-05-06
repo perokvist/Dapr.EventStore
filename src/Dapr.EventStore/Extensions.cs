@@ -15,8 +15,9 @@ namespace Dapr.EventStore
     {
         public static async Task<(IEnumerable<EventData> Events, long Version)> LoadSlicesAsync(
             this DaprClient client, string storeName, ILogger logger,
-            string streamName, long version, Dictionary<string, string> meta, StateEntry<StreamHead> head, List<EventData[]> eventSlices)
+            string streamName, long version, Dictionary<string, string> meta, StateEntry<StreamHead> head)
         {
+            var eventSlices = new List<EventData[]>();
             using (logger.BeginScope("Loading head {streamName}. Starting version {version}", head.Key, head.Value.Version))
             {
                 var next = head.Value.Version;
@@ -63,13 +64,13 @@ namespace Dapr.EventStore
             return (events, events.LastOrDefault()?.Version ?? head.Value.Version);
         }
 
-        public static (IAsyncEnumerable<EventData> Events, Func<Task<long>> Version) LoadBulkEventsAsync(
-            this DaprClient client, string storeName,
-            string streamName, long version, Dictionary<string, string> meta, StateEntry<StreamHead> head)
-        {
-            var events = client.LoadAsyncBulkEvents(storeName, streamName, version, meta, head);
-            return (events, async () => Convert.ToInt64(await events.CountAsync()));
-        }
+        //public static (IAsyncEnumerable<EventData> Events, Func<Task<long>> Version) LoadBulkEventsAsync(
+        //    this DaprClient client, string storeName,
+        //    string streamName, long version, Dictionary<string, string> meta, StateEntry<StreamHead> head)
+        //{
+        //    var events = client.LoadAsyncBulkEvents(storeName, streamName, version, meta, head);
+        //    return (events, async () => Convert.ToInt64(await events.CountAsync()));
+        //}
 
         public static async IAsyncEnumerable<EventData> LoadAsyncBulkEvents(
             this DaprClient client, string storeName,
