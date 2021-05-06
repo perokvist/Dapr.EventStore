@@ -92,7 +92,10 @@ namespace Dapr.EventStore
             var eventSlices = new List<EventData[]>();
 
             if (Mode == SliceMode.Off)
-                return await client.LoadBulkEventsAsync(StoreName, streamName, version, meta, head);
+            {
+                var (events, v) = client.LoadBulkEventsAsync(StoreName, streamName, version, meta, head);
+                return (events.ToEnumerable(), await v());
+            }
 
             return await client.LoadSlicesAsync(StoreName, logger, streamName, version, meta, head, eventSlices);
         }
