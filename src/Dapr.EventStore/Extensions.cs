@@ -68,7 +68,7 @@ namespace Dapr.EventStore
 
         public static async IAsyncEnumerable<EventData> LoadAsyncBulkEventsAsync(
             this DaprClient client, string storeName,
-            string streamName, long version, Dictionary<string, string> meta, StreamHead head)
+            string streamName, long version, Dictionary<string, string> meta, StreamHead head, int chunkSize = 20)
         {
             var keys = Enumerable
                 .Range(version == default ? 1 : (int)version, (int)(head.Version) + (version == default ? default : 1))
@@ -79,12 +79,25 @@ namespace Dapr.EventStore
             if (!keys.Any())
                 yield break;
 
-            var events = (await client.GetBulkStateAsync(storeName, keys, null, metadata: meta))
-                .Select(x => JsonSerializer.Deserialize<EventData>(x.Value))
-                .OrderBy(x => x.Version);
+            foreach (var chunk in keys.BuildChunks(chunkSize))
+            {
+                var events = (await client.GetBulkStateAsync(storeName, chunk.ToArray(), null, metadata: meta))
+                    .Select(x => JsonSerializer.Deserialize<EventData>(x.Value))
+                    .OrderBy(x => x.Version);
 
-            foreach (var e in events)
-                yield return e;
+                foreach (var e in events)
+                    yield return e;
+            }
+        }
+
+        static IEnumerable<IEnumerable<T>> BuildChunks<T>(this IEnumerable<T> list, int batchSize)
+        {
+            int total = 0;
+            while (total < list.Count())
+            {
+                yield return list.Skip(total).Take(batchSize);
+                total += batchSize;
+            }
         }
 
         public static async Task StateTransactionSliceAsync(this DaprClient client,
