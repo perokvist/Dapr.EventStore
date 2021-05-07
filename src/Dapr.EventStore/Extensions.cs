@@ -15,12 +15,12 @@ namespace Dapr.EventStore
     {
         public static async Task<(IEnumerable<EventData> Events, long Version)> LoadSlicesAsync(
             this DaprClient client, string storeName, ILogger logger,
-            string streamName, long version, Dictionary<string, string> meta, StateEntry<StreamHead> head)
+            string streamName, long version, Dictionary<string, string> meta, StreamHead head)
         {
             var eventSlices = new List<EventData[]>();
-            using (logger.BeginScope("Loading head {streamName}. Starting version {version}", head.Key, head.Value.Version))
+            using (logger.BeginScope("Loading head {streamName}. Starting version {version}", streamName, head.Version))
             {
-                var next = head.Value.Version;
+                var next = head.Version;
 
                 while (next != 0 && next >= version)
                 {
@@ -49,36 +49,30 @@ namespace Dapr.EventStore
                     .SelectMany(e => e)
                     .ToArray();
 
-                return (events, events.LastOrDefault()?.Version ?? head.Value.Version);
+                return (events, events.LastOrDefault()?.Version ?? head.Version);
             }
         }
 
         public static (IEnumerable<EventData> Events, long Version) LoadBulkEvents(
             this DaprClient client, string storeName,
-            string streamName, long version, Dictionary<string, string> meta, StateEntry<StreamHead> head)
+            string streamName, long version, Dictionary<string, string> meta, StreamHead head)
         {
             var events = client
-                .LoadAsyncBulkEvents(storeName, streamName, version, meta, head)
+
+                .LoadAsyncBulkEventsAsync(storeName, streamName, version, meta, head)
                 .ToEnumerable();
 
-            return (events, events.LastOrDefault()?.Version ?? head.Value.Version);
+            return (events, events.LastOrDefault()?.Version ?? head.Version);
         }
 
-        //public static (IAsyncEnumerable<EventData> Events, Func<Task<long>> Version) LoadBulkEventsAsync(
-        //    this DaprClient client, string storeName,
-        //    string streamName, long version, Dictionary<string, string> meta, StateEntry<StreamHead> head)
-        //{
-        //    var events = client.LoadAsyncBulkEvents(storeName, streamName, version, meta, head);
-        //    return (events, async () => Convert.ToInt64(await events.CountAsync()));
-        //}
 
-        public static async IAsyncEnumerable<EventData> LoadAsyncBulkEvents(
+        public static async IAsyncEnumerable<EventData> LoadAsyncBulkEventsAsync(
             this DaprClient client, string storeName,
-            string streamName, long version, Dictionary<string, string> meta, StateEntry<StreamHead> head)
+            string streamName, long version, Dictionary<string, string> meta, StreamHead head)
         {
             var keys = Enumerable
-                .Range(version == default ? 1 : (int)version, (int)(head.Value.Version) + (version == default ? default : 1))
-                .Where(x => x <= head.Value.Version)
+                .Range(version == default ? 1 : (int)version, (int)(head.Version) + (version == default ? default : 1))
+                .Where(x => x <= head.Version)
                 .Select(x => Naming.StreamKey(streamName, x))
                 .ToList();
 
@@ -148,5 +142,11 @@ namespace Dapr.EventStore
             return result;
         }
 
+        public static (IAsyncEnumerable<EventData> Events, Func<Task<long>> Version) LoadBulkEventsWithVersionAsync(
+            this DaprEventStore store, string streamName, long version)
+        {
+            var events = store.LoadEventStreamAsync(streamName, version);
+            return (events, async () => (await events.LastAsync()).Version);
+        }
     }
 }
