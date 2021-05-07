@@ -159,7 +159,7 @@ namespace Dapr.EventStore
             this DaprEventStore store, string streamName, long version)
         {
             var events = store.LoadEventStreamAsync(streamName, version);
-            return (events, async () => (await events.LastAsync()).Version);
+            return (events, async () => (await events.LastOrDefaultAsync())?.Version ?? 0);
         }
     }
 }
