@@ -81,20 +81,35 @@ namespace Dapr.EventStore
             return newVersion;
         }
 
-        public async Task<(IEnumerable<EventData> Events, long Version)> LoadEventStreamAsync(string streamName, long version)
+        public async Task<StreamHead> GetStreamMetaData(string streamName)
         {
             var meta = MetaProvider(streamName);
+
             var head = await client.GetStateEntryAsync<StreamHead>(StoreName, $"{streamName}|head", metadata: meta);
 
-            if (head.Value == null)
-                return (Enumerable.Empty<EventData>(), new StreamHead().Version);
+            return head.Value;
+        }
 
-            var eventSlices = new List<EventData[]>();
+        public async IAsyncEnumerable<EventData> LoadEventStreamAsync(string streamName, long version)
+        {
+            var head = await GetStreamMetaData(streamName);
+
+            if (head == null)
+                yield break;
+
+            var meta = MetaProvider(streamName);
 
             if (Mode == SliceMode.Off)
-                return await client.LoadBulkEventsAsync(StoreName, streamName, version, meta, head);
+            {
+                await foreach (var e in client.LoadAsyncBulkEventsAsync(StoreName, streamName, version, meta, head))
+                    yield return e;
+                yield break;
+            }
 
-            return await client.LoadSlicesAsync(StoreName, logger, streamName, version, meta, head, eventSlices);
+            var (events, _) = await client.LoadSlicesAsync(StoreName, logger, streamName, version, meta, head);
+
+            await foreach (var e in events.ToAsyncEnumerable())
+                yield return e;
         }
 
         public record StreamHead(long Version = 0)
