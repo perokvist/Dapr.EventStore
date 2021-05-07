@@ -132,6 +132,6 @@ namespace Dapr.EventStore
 
     public record EventData(string EventId, string EventName, object Data, long Version = 0)
     {
-        public static EventData Create(string EventName, object Data, long Version = 0) => new EventData(Guid.NewGuid().ToString(), EventName, Data, Version);
+        public static EventData Create(string EventName, object Data, long Version = 0) => new(Guid.NewGuid().ToString(), EventName, Data, Version);
     }
 }

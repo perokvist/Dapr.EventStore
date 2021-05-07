@@ -18,7 +18,7 @@ namespace Dapr.EventStore.Tests
 
         public EventStoreTests()
         {
-            //Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50001");
+            Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50001");
             var inDapr = Environment.GetEnvironmentVariable("DAPR_GRPC_PORT") != null;
 
             if (inDapr)
@@ -99,7 +99,7 @@ namespace Dapr.EventStore.Tests
             store.Mode = sliceMode;
             var @event = EventData.Create("test", new TestEvent("id", "hey"));
             _ = await store.AppendToStreamAsync(streamName, 0, new EventData[] { @event });
-            var (stream, _) = store.LoadBulkEventsWithVersionAsync(streamName, 0);
+            var stream = store.LoadEventStreamAsync(streamName, 0);
 
             Assert.Equal("hey", (await stream.FirstAsync()).EventAs<TestEvent>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }).Title);
         }
@@ -113,9 +113,9 @@ namespace Dapr.EventStore.Tests
             store.Mode = sliceMode;
             var @event = EventData.Create("test", new Envelope<TestEvent> { Event = new TestEvent("id", "hey"), Messsage = "test" });
             _ = await store.AppendToStreamAsync(streamName, 0, new EventData[] { @event });
-            var (stream, _) = store.LoadBulkEventsWithVersionAsync(streamName, 0);
+            var stream = store.LoadEventStreamAsync(streamName, 0);
 
-            Assert.Equal("hey", (await stream.FirstAsync()).EventAs<Envelope<TestEvent>>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }).Event.Title);
+            Assert.Equal("hey", (await stream.LastAsync()).EventAs<Envelope<TestEvent>>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }).Event.Title);
         }
 
         [Theory]
@@ -126,9 +126,9 @@ namespace Dapr.EventStore.Tests
         {
             store.Mode = sliceMode;
             _ = await store.AppendToStreamAsync(streamName, 0, new EventData[]{ EventData.Create("test", "hello 1") });
-            var (_, version) = store.LoadBulkEventsWithVersionAsync(streamName, 0);
+            var stream = store.LoadEventStreamAsync(streamName, 0);
 
-            Assert.Equal(1, await version());
+            Assert.Equal(1, (await stream.LastAsync()).Version);
         }
 
         [Theory]
@@ -143,9 +143,9 @@ namespace Dapr.EventStore.Tests
             await store.AppendToStreamAsync(streamName, 1, new EventData[]{ EventData.Create("test", "hello 2") });
             await store.AppendToStreamAsync(streamName, 2, new EventData[]{ EventData.Create("test", "hello 3") });
 
-            var (_, version) = store.LoadBulkEventsWithVersionAsync(streamName, 0);
+            var stream = store.LoadEventStreamAsync(streamName, 0);
 
-            Assert.Equal(3, await version());
+            Assert.Equal(3, (await stream.LastAsync()).Version);
         }
 
         [Theory]
@@ -164,9 +164,9 @@ namespace Dapr.EventStore.Tests
                 EventData.Create("test", "hello 4")
             });
 
-            var (_, version) = store.LoadBulkEventsWithVersionAsync(streamName, 0);
+            var stream = store.LoadEventStreamAsync(streamName, 0);
 
-            Assert.Equal(4, await version());
+            Assert.Equal(4, (await stream.LastAsync()).Version);
         }
 
         [Theory]
@@ -189,9 +189,9 @@ namespace Dapr.EventStore.Tests
                 EventData.Create("test", "hello 4")
             });
 
-            var (_, version) = store.LoadBulkEventsWithVersionAsync(streamName, 0);
+            var stream = store.LoadEventStreamAsync(streamName, 0);
 
-            Assert.Equal(4, await version());
+            Assert.Equal(4, (await stream.LastAsync()).Version);
         }
 
         [Theory]
@@ -214,12 +214,11 @@ namespace Dapr.EventStore.Tests
                 EventData.Create("test","hello 4")
             });
 
-            var (events, version) = store.LoadBulkEventsWithVersionAsync(streamName, 2);
+            var events = store.LoadEventStreamAsync(streamName, 2);
 
             Assert.Equal(4, (await events.LastAsync()).Version);
             Assert.Equal(3, await events.CountAsync());
-            Assert.Equal(4, await version());
-
+            Assert.Equal(4, (await events.LastAsync()).Version);
         }
 
         [Theory]
@@ -275,16 +274,15 @@ namespace Dapr.EventStore.Tests
 
             var versionV1 = await store.AppendToStreamAsync(streamName, 0,
                 new EventData[]{ EventData.Create("t", "hello 1") });
-            var (ev1, streamV1) = store.LoadBulkEventsWithVersionAsync(streamName, 0);
+            var ev1 = store.LoadEventStreamAsync(streamName, 0);
             var events1 = await ev1.ToListAsync();
-            var loadVersion1 = await streamV1();
+            var loadVersion1 = events1.Last().Version;
 
-            var versionV2 = await store.AppendToStreamAsync(streamName, await streamV1(),
+            var versionV2 = await store.AppendToStreamAsync(streamName, loadVersion1,
                 new EventData[]{ EventData.Create("y", "hello 2") });
-            var (ev2 ,streamV2) = store.LoadBulkEventsWithVersionAsync(streamName, 0);
+            var ev2 = store.LoadEventStreamAsync(streamName, 0);
             var events2 = await ev2.ToListAsync();
-            var loadVersion2 = await streamV2();
-
+            var loadVersion2 = events2.Last().Version;
 
             Assert.Single(events1);
             Assert.Equal(1, loadVersion1);
@@ -292,6 +290,31 @@ namespace Dapr.EventStore.Tests
             Assert.Equal(2, events2.Count);
             Assert.Equal(2, loadVersion2);
             Assert.Equal(versionV2, loadVersion2);
+        }
+
+        [Theory]
+        [InlineData(DaprEventStore.SliceMode.Off)]
+        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+        [InlineData(DaprEventStore.SliceMode.Transactional)]
+        public async Task AppendAndLoadChunk(DaprEventStore.SliceMode sliceMode)
+        {
+            store.Mode = sliceMode;
+
+            var eventsToAppend = Enumerable.Range(0, 30)
+                .Select((i,x) => EventData.Create("t", $"hello {i+1}"))
+                .ToArray();
+
+            var appendVersion = await store.AppendToStreamAsync(streamName, 0,
+                eventsToAppend);
+            var events = store.LoadEventStreamAsync(streamName, 0);
+            var eventsList = await events.ToArrayAsync();
+            var streamVersion = eventsList.Last().Version;
+
+            Assert.Equal(30, eventsToAppend.Length);
+            Assert.Equal(30, appendVersion);
+            Assert.Equal(30, eventsList.Last().Version);
+            Assert.Equal(30, eventsList.Length);
+            Assert.Equal(30, streamVersion);
         }
 
         [Fact]
@@ -303,8 +326,8 @@ namespace Dapr.EventStore.Tests
                 //EventData.Create { Data = "hello 2" },
             });
 
-            var stream = store.LoadBulkEventsWithVersionAsync(streamName, 1);
-            await stream.Events.CountAsync();
+            var stream = store.LoadEventStreamAsync(streamName, 1);
+            await stream.CountAsync();
         }
     }
 }

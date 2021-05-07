@@ -154,12 +154,5 @@ namespace Dapr.EventStore
             var result = JsonSerializer.Deserialize<T>(bufferWriter.WrittenSpan, options);
             return result;
         }
-
-        public static (IAsyncEnumerable<EventData> Events, Func<Task<long>> Version) LoadBulkEventsWithVersionAsync(
-            this DaprEventStore store, string streamName, long version)
-        {
-            var events = store.LoadEventStreamAsync(streamName, version);
-            return (events, async () => (await events.LastOrDefaultAsync())?.Version ?? 0);
-        }
     }
 }
