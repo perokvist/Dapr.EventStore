@@ -2,7 +2,7 @@
 ![Build](https://github.com/perokvist/Dapr.EventStore/workflows/.NET%20Core/badge.svg)
 
 # Dapr.EventStore
-Demo implementation of an naive EventStore with DaprClient (as feedback)
+Demo implementation of an basic EventStore with DaprClient.
 
 ## DaprClient
 
