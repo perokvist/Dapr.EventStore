@@ -1089,6 +1089,11 @@ namespace Dapr.Client
                 _ => throw new ArgumentException($"{concurrencyMode} Concurrency Mode is not supported.")
             };
         }
+
+        public override Task DeleteBulkStateAsync(string storeName, IReadOnlyList<BulkDeleteStateItem> items, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
         #endregion Helper Methods
     }
 }

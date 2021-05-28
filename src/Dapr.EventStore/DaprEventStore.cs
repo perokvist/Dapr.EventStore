@@ -108,7 +108,7 @@ namespace Dapr.EventStore
 
             var (events, _) = await client.LoadSlicesAsync(StoreName, logger, streamName, version, meta, head);
 
-            await foreach (var e in events.ToAsyncEnumerable())
+            foreach (var e in events)
                 yield return e;
         }
 

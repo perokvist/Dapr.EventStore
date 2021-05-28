@@ -42,7 +42,7 @@ namespace Dapr.EventStore
                     eventSlices.Add(slice);
                 }
 
-                logger.LogDebug("Done reading. Got {sliceCount} slices.", eventSlices.Count());
+                logger.LogDebug("Done reading. Got {sliceCount} slices.", eventSlices.Count);
 
                 var events = eventSlices
                     .Reverse<EventData[]>()
@@ -53,17 +53,17 @@ namespace Dapr.EventStore
             }
         }
 
-        public static (IEnumerable<EventData> Events, long Version) LoadBulkEvents(
-            this DaprClient client, string storeName,
-            string streamName, long version, Dictionary<string, string> meta, StreamHead head)
-        {
-            var events = client
+        //public static (IEnumerable<EventData> Events, long Version) LoadBulkEvents(
+        //    this DaprClient client, string storeName,
+        //    string streamName, long version, Dictionary<string, string> meta, StreamHead head)
+        //{
+        //    var events = client
 
-                .LoadAsyncBulkEventsAsync(storeName, streamName, version, meta, head)
-                .ToEnumerable();
+        //        .LoadAsyncBulkEventsAsync(storeName, streamName, version, meta, head)
+        //        .ToEnumerable();
 
-            return (events, events.LastOrDefault()?.Version ?? head.Version);
-        }
+        //    return (events, events.LastOrDefault()?.Version ?? head.Version);
+        //}
 
 
         public static async IAsyncEnumerable<EventData> LoadAsyncBulkEventsAsync(
