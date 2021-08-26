@@ -1094,6 +1094,11 @@ namespace Dapr.Client
         {
             throw new NotImplementedException();
         }
+
+        public override Task<bool> CheckHealthAsync(CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
         #endregion Helper Methods
     }
 }
