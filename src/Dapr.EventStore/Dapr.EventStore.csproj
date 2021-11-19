@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
-    <VersionPrefix>1.2.0</VersionPrefix>
+    <TargetFramework>net6.0</TargetFramework>
+    <VersionPrefix>1.5.0</VersionPrefix>
     <VersionSuffix>alpha.2</VersionSuffix>
     <PackageId>StateStore.Dapr.EventStore</PackageId>
     <Description>A basic event store on top of dapr state store</Description>
@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Dapr.Client" Version="1.2.0" />
+    <PackageReference Include="Dapr.Client" Version="1.5.0" />
     <!--<PackageReference Include="System.Linq.Async" Version="5.0.0" />-->
   </ItemGroup>
 
