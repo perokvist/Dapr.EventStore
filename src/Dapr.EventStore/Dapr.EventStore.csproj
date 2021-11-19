@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <VersionPrefix>1.5.0</VersionPrefix>
-    <VersionSuffix>alpha.1</VersionSuffix>
+    <VersionSuffix>alpha.2</VersionSuffix>
     <PackageId>StateStore.Dapr.EventStore</PackageId>
     <Description>A basic event store on top of dapr state store</Description>
     <Title>StateStore.Dapr.EventStore</Title>
