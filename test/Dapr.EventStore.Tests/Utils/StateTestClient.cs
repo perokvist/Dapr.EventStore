@@ -147,7 +147,6 @@ namespace Dapr.Client
                 return ((TValue)obj, "test_etag");
             };
 
-            //var stream = JObject.Parse(jsonQuery).SelectToken("filter.EQ.StreamName").Single().ToString();
             dynamic data = JObject.Parse(jsonQuery);
             var stream = data.filter.EQ.StreamName.ToString();
 
