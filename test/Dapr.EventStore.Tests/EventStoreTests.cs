@@ -30,6 +30,7 @@ public class EventStoreTests : IDisposable
 
             store = new DaprEventStore(client, NullLogger<DaprEventStore>.Instance)
             .PartitionPerStream();
+
             CosmosUtil.CreateAsync(store.StoreName, store.StoreName).GetAwaiter().GetResult();
         }
         else
