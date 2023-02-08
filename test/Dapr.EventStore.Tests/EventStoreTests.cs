@@ -8,326 +8,382 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace Dapr.EventStore.Tests
+namespace Dapr.EventStore.Tests;
+
+public class EventStoreTests : IDisposable
 {
-    public class EventStoreTests
+    private readonly DaprClient client;
+    private readonly DaprEventStore store;
+    private readonly string streamName;
+
+    bool InDapr() => Environment.GetEnvironmentVariable("DAPR_GRPC_PORT") != null;
+
+    public EventStoreTests()
     {
-        private readonly DaprClient client;
-        private readonly DaprEventStore store;
-        private readonly string streamName;
+        //Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50001");
 
-        public EventStoreTests()
+        if (InDapr())
         {
-            //Environment.SetEnvironmentVariable("DAPR_GRPC_PORT", "50001");
-            var inDapr = Environment.GetEnvironmentVariable("DAPR_GRPC_PORT") != null;
+            client = new DaprClientBuilder()
+                .UseJsonSerializationOptions(new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                .Build();
 
-            if (inDapr)
-            {
-                client = new DaprClientBuilder()
-                    .UseJsonSerializationOptions(new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-                    .Build();
+            store = new DaprEventStore(client, NullLogger<DaprEventStore>.Instance)
+            .PartitionPerStream();
 
-                store = new DaprEventStore(client, NullLogger<DaprEventStore>.Instance)
+            CosmosUtil.CreateAsync(store.StoreName, store.StoreName).GetAwaiter().GetResult();
+        }
+        else
+        {
+            client = new StateTestClient();
+            store = new DaprEventStore(new StateTestClient(), NullLogger<DaprEventStore>.Instance);
+        }
+
+
+        streamName = $"teststream-{Guid.NewGuid().ToString().Substring(0, 5)}";
+    }
+
+    public void Dispose()
+    {
+        if (InDapr())
+            CosmosUtil.DeleteAsync(store.StoreName, store.StoreName).GetAwaiter().GetResult();
+    }
+
+    [Fact]
+    public async Task TransactionBugHunt()
+    {
+
+        var stateRequests = Enumerable.Range(0, 1)
+            .Select(x => new StateTransactionRequest(
+                $"test-{x}", JsonSerializer.SerializeToUtf8Bytes("testing"),
+                StateOperationType.Upsert, etag: "test"))
+            .ToList();
+
+        await client.ExecuteStateTransactionAsync("statestore", stateRequests);
+
+    }
+
+    [Fact]
+    public async Task ProtoEtagCheckAsync()
+    {
+        var store = "localcosmos";
+        var key = Guid.NewGuid().ToString().Substring(0, 5);
+        await client.SaveStateAsync(store, key, EventData.Create("test", new TestEvent("id", "hey"), 1));
+        var (value, etag) = await client.GetStateAndETagAsync<EventData>(store, key);
+        await client.TrySaveStateAsync(store, key, value with { Version = 2 }, etag);
+    }
+
+    [Theory]
+    [InlineData("statestore")]
+    [InlineData("localcosmos")]
+    [Trait("Category", "Integration")]
+    public async Task ByteVsJsonCheckAsync(string store)
+    {
+        var key = Guid.NewGuid().ToString().Substring(0, 5);
+        var @event = EventData.Create("test", new TestEvent("id", "hey"));
+        var req = new StateTransactionRequest(key, JsonSerializer.SerializeToUtf8Bytes(@event), StateOperationType.Upsert);
+        await client.ExecuteStateTransactionAsync(store, new[] { req });
+        var (value, etag) = await client.GetStateAndETagAsync<EventData>(store, key);
+    }
+
+    [Theory]
+    [InlineData("statestore")]
+    [InlineData("localcosmos")]
+    [Trait("Category", "Integration")]
+    public async Task ByteVsJsonGetBulkCheckAsync(string store)
+    {
+        var meta = new Dictionary<string, string>
                 {
-                    StoreName = "statestore",
-                    MetaProvider = stream => new Dictionary<string, string>
-                    {
-                        { "partitionKey", streamName }
-                    }
+                    { "partitionKey", streamName },
+                    { "contentType", "application/json" }
                 };
-            }
-            else
-            {
-                client = new StateTestClient();
-                store = new DaprEventStore(new StateTestClient(), NullLogger<DaprEventStore>.Instance);
-            }
 
-            streamName = $"teststream-{Guid.NewGuid().ToString().Substring(0, 5)}";
-        }
+        var key = Guid.NewGuid().ToString().Substring(0, 5);
+        var @event = EventData.Create("test", new TestEvent("id", "hey"));
+        var req = new StateTransactionRequest(key, JsonSerializer.SerializeToUtf8Bytes(@event), StateOperationType.Upsert, metadata: meta);
+        await client.ExecuteStateTransactionAsync(store, new[] { req }, metadata: meta);
+        var items = await client.GetBulkStateAsync(store, new[] { key }, 1, metadata: meta);
+        var events = items.Select(x => JsonSerializer.Deserialize<EventData>(x.Value)).ToList();
+    }
 
-        [Fact]
-        public async Task ProtoEtagCheckAsync()
+    public record TestEvent(string Id, string Title);
+
+    public class Envelope<T>
+    {
+        public string Messsage { get; set; }
+        public T Event { get; set; }
+    }
+
+    [Theory]
+    [InlineData(DaprEventStore.SliceMode.Off)]
+    [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+    [InlineData(DaprEventStore.SliceMode.Transactional)]
+    [InlineData(DaprEventStore.SliceMode.OffAndSharedAll)]
+    public async Task LoadReturnsDeserialized(DaprEventStore.SliceMode sliceMode)
+    {
+        store.Mode = sliceMode;
+        SetupMetaData();
+
+        var @event = EventData.Create("test", new TestEvent("id", "hey"));
+        _ = await store.AppendToStreamAsync(streamName, 0, new EventData[] { @event });
+        var stream = store.LoadEventStreamAsync(streamName, 0);
+
+        Assert.Equal("hey", (await stream.FirstAsync()).EventAs<TestEvent>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }).Title);
+    }
+
+    [Theory]
+    [InlineData(DaprEventStore.SliceMode.Off)]
+    [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+    [InlineData(DaprEventStore.SliceMode.Transactional)]
+    [InlineData(DaprEventStore.SliceMode.OffAndSharedAll)]
+    public async Task LoadReturnsDeserializedEnvelope(DaprEventStore.SliceMode sliceMode)
+    {
+        store.Mode = sliceMode;
+        SetupMetaData();
+
+        var @event = EventData.Create("test", new Envelope<TestEvent> { Event = new TestEvent("id", "hey"), Messsage = "test" });
+        _ = await store.AppendToStreamAsync(streamName, 0, new EventData[] { @event });
+        var stream = store.LoadEventStreamAsync(streamName, 0);
+
+        Assert.Equal("hey", (await stream.LastAsync()).EventAs<Envelope<TestEvent>>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }).Event.Title);
+    }
+
+    [Theory]
+    [InlineData(DaprEventStore.SliceMode.Off)]
+    [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+    [InlineData(DaprEventStore.SliceMode.Transactional)]
+    [InlineData(DaprEventStore.SliceMode.OffAndSharedAll)]
+    public async Task LoadReturnsVersion(DaprEventStore.SliceMode sliceMode)
+    {
+        store.Mode = sliceMode;
+        SetupMetaData();
+
+        _ = await store.AppendToStreamAsync(streamName, 0, new EventData[] { EventData.Create("test", "hello 1") });
+        var stream = store.LoadEventStreamAsync(streamName, 0);
+
+        Assert.Equal(1, (await stream.LastAsync()).Version);
+    }
+
+    [Theory]
+    [InlineData(DaprEventStore.SliceMode.Off)]
+    [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+    [InlineData(DaprEventStore.SliceMode.Transactional)]
+    [InlineData(DaprEventStore.SliceMode.OffAndSharedAll)]
+    public async Task LoadMutipleReturnsVersion(DaprEventStore.SliceMode sliceMode)
+    {
+        store.Mode = sliceMode;
+        SetupMetaData();
+
+        await store.AppendToStreamAsync(streamName, 0, new EventData[] { EventData.Create("test", "hello 1") });
+        await store.AppendToStreamAsync(streamName, 1, new EventData[] { EventData.Create("test", "hello 2") });
+        await store.AppendToStreamAsync(streamName, 2, new EventData[] { EventData.Create("test", "hello 3") });
+
+        var stream = store.LoadEventStreamAsync(streamName, 0);
+
+        Assert.Equal(3, (await stream.LastAsync()).Version);
+    }
+
+    [Theory]
+    [InlineData(DaprEventStore.SliceMode.Off)]
+    [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+    [InlineData(DaprEventStore.SliceMode.Transactional)]
+    [InlineData(DaprEventStore.SliceMode.OffAndSharedAll)]
+    public async Task LoadArrayReturnsVersion(DaprEventStore.SliceMode sliceMode)
+    {
+        store.Mode = sliceMode;
+        SetupMetaData();
+
+        await store.AppendToStreamAsync(streamName, 0, new EventData[]
         {
-            var store = "localcosmos";
-            var key = Guid.NewGuid().ToString().Substring(0, 5);
-            await client.SaveStateAsync(store, key, EventData.Create("test", new TestEvent("id", "hey") , 1));
-            var (value, etag) = await client.GetStateAndETagAsync<EventData>(store, key);
-            await client.TrySaveStateAsync(store, key, value with { Version = 2 }, etag); 
-        }
+            EventData.Create("test", "hello 1"),
+            EventData.Create("test", "hello 2"),
+            EventData.Create("test", "hello 3"),
+            EventData.Create("test", "hello 4")
+        });
 
-        [Theory]
-        [InlineData("statestore")]
-        [InlineData("localcosmos")]
-        [Trait("Category", "Integration")]
-        public async Task ByteVsJsonCheckAsync(string store)
+        var stream = store.LoadEventStreamAsync(streamName, 0);
+
+        Assert.Equal(4, (await stream.LastAsync()).Version);
+    }
+
+    [Theory]
+    [InlineData(DaprEventStore.SliceMode.Off)]
+    [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+    [InlineData(DaprEventStore.SliceMode.Transactional)]
+    [InlineData(DaprEventStore.SliceMode.OffAndSharedAll)]
+    public async Task LoadMultipleArraysReturnsVersion(DaprEventStore.SliceMode sliceMode)
+    {
+        store.Mode = sliceMode;
+        SetupMetaData();
+
+        await store.AppendToStreamAsync(streamName, 0, new EventData[]
         {
-            var key = Guid.NewGuid().ToString().Substring(0, 5);
-            var @event = EventData.Create("test", new TestEvent("id", "hey"));
-            var req = new StateTransactionRequest(key, JsonSerializer.SerializeToUtf8Bytes(@event), StateOperationType.Upsert);
-            await client.ExecuteStateTransactionAsync(store, new[] { req });
-            var (value, etag) = await client.GetStateAndETagAsync<EventData>(store, key);
-        }
+            EventData.Create("test", "hello 1"),
+            EventData.Create("test", "hello 2"),
+        });
 
-        [Theory]
-        [InlineData("statestore")]
-        [InlineData("localcosmos")]
-        [Trait("Category", "Integration")]
-        public async Task ByteVsJsonGetBulkCheckAsync(string store)
+        await store.AppendToStreamAsync(streamName, 2, new EventData[]
         {
-            var key = Guid.NewGuid().ToString().Substring(0, 5);
-            var @event = EventData.Create("test", new TestEvent("id", "hey"));
-            var req = new StateTransactionRequest(key, JsonSerializer.SerializeToUtf8Bytes(@event), StateOperationType.Upsert);
-            await client.ExecuteStateTransactionAsync(store, new[] { req });
-            var items = await client.GetBulkStateAsync(store, new[] { key }, null);
-            var events = items.Select(x => JsonSerializer.Deserialize<EventData>(x.Value)).ToList();
-        }
+            EventData.Create("test", "hello 3"),
+            EventData.Create("test", "hello 4")
+        });
 
-        public record TestEvent(string Id, string Title);
+        var stream = store.LoadEventStreamAsync(streamName, 0);
 
-        public class Envelope<T>
+        Assert.Equal(4, (await stream.LastAsync()).Version);
+    }
+
+    [Theory]
+    [InlineData(DaprEventStore.SliceMode.Off)]
+    [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+    [InlineData(DaprEventStore.SliceMode.Transactional)]
+    [InlineData(DaprEventStore.SliceMode.OffAndSharedAll)]
+    public async Task LoadMultipleArraysReturnsVersionInSlice(DaprEventStore.SliceMode sliceMode)
+    {
+        store.Mode = sliceMode;
+        SetupMetaData();
+
+        await store.AppendToStreamAsync(streamName, 0, new EventData[]
         {
-            public string Messsage { get; set; }
-            public T Event { get; set; }
-        }
+            EventData.Create("test", "hello 1"),
+            EventData.Create("test", "hello 2"),
+        });
 
-        [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off)]
-        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
-        [InlineData(DaprEventStore.SliceMode.Transactional)]
-        public async Task LoadReturnsDeserialized(DaprEventStore.SliceMode sliceMode)
+        await store.AppendToStreamAsync(streamName, 2, new EventData[]
         {
-            store.Mode = sliceMode;
-            var @event = EventData.Create("test", new TestEvent("id", "hey"));
-            _ = await store.AppendToStreamAsync(streamName, 0, new EventData[] { @event });
-            var stream = store.LoadEventStreamAsync(streamName, 0);
+            EventData.Create("test","hello 3"),
+            EventData.Create("test","hello 4")
+        });
 
-            Assert.Equal("hey", (await stream.FirstAsync()).EventAs<TestEvent>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }).Title);
-        }
+        var events = store.LoadEventStreamAsync(streamName, 2);
 
-        [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off)]
-        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
-        [InlineData(DaprEventStore.SliceMode.Transactional)]
-        public async Task LoadReturnsDeserializedEnvelope(DaprEventStore.SliceMode sliceMode)
+        Assert.Equal(4, (await events.LastAsync()).Version);
+        Assert.Equal(3, await events.CountAsync());
+        Assert.Equal(4, (await events.LastAsync()).Version);
+    }
+
+    [Theory]
+    [InlineData(DaprEventStore.SliceMode.Off)]
+    [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+    [InlineData(DaprEventStore.SliceMode.Transactional)]
+    [InlineData(DaprEventStore.SliceMode.OffAndSharedAll)]
+    public async Task AppendReturnsVersion(DaprEventStore.SliceMode sliceMode)
+    {
+        store.Mode = sliceMode;
+        SetupMetaData();
+
+        var version = await store.AppendToStreamAsync(streamName, 0, new EventData[] { EventData.Create("test", "hello 1") });
+
+        Assert.Equal(1, version);
+    }
+
+    [Theory]
+    [InlineData(DaprEventStore.SliceMode.Off)]
+    [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+    [InlineData(DaprEventStore.SliceMode.Transactional)]
+    [InlineData(DaprEventStore.SliceMode.OffAndSharedAll)]
+    public async Task AppendMultipleReturnsVersion(DaprEventStore.SliceMode sliceMode)
+    {
+        store.Mode = sliceMode;
+        SetupMetaData();
+
+        await store.AppendToStreamAsync(streamName, 0, new EventData[] { EventData.Create("test", "hello 1") });
+        await store.AppendToStreamAsync(streamName, 1, new EventData[] { EventData.Create("test", "hello 2") });
+        var version = await store.AppendToStreamAsync(streamName, 2, new EventData[] { EventData.Create("test", "hello 3") });
+
+        Assert.Equal(3, version);
+    }
+
+    [Theory]
+    [InlineData(DaprEventStore.SliceMode.Off)]
+    [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+    [InlineData(DaprEventStore.SliceMode.Transactional)]
+    [InlineData(DaprEventStore.SliceMode.OffAndSharedAll)]
+    public async Task AppendToWrongVersionThrows(DaprEventStore.SliceMode sliceMode)
+    {
+        store.Mode = sliceMode;
+        SetupMetaData();
+
+        await Assert.ThrowsAsync<DBConcurrencyException>(async () =>
         {
-            store.Mode = sliceMode;
-            var @event = EventData.Create("test", new Envelope<TestEvent> { Event = new TestEvent("id", "hey"), Messsage = "test" });
-            _ = await store.AppendToStreamAsync(streamName, 0, new EventData[] { @event });
-            var stream = store.LoadEventStreamAsync(streamName, 0);
+            _ = await store.AppendToStreamAsync(streamName, 0, new EventData[] { EventData.Create("test", "hello 1") });
+            await store.AppendToStreamAsync(streamName, 0, new EventData[] { EventData.Create("test", "hello 2") });
+        });
+    }
 
-            Assert.Equal("hey", (await stream.LastAsync()).EventAs<Envelope<TestEvent>>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true }).Event.Title);
-        }
+    [Theory]
+    [InlineData(DaprEventStore.SliceMode.Off)]
+    [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+    [InlineData(DaprEventStore.SliceMode.Transactional)]
+    [InlineData(DaprEventStore.SliceMode.OffAndSharedAll)]
+    public async Task AppendAndLoad(DaprEventStore.SliceMode sliceMode)
+    {
+        store.Mode = sliceMode;
+        SetupMetaData();
 
-        [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off)]
-        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
-        [InlineData(DaprEventStore.SliceMode.Transactional)]
-        public async Task LoadReturnsVersion(DaprEventStore.SliceMode sliceMode)
+        var versionV1 = await store.AppendToStreamAsync(streamName, 0,
+            new EventData[] { EventData.Create("t", "hello 1") });
+        var ev1 = store.LoadEventStreamAsync(streamName, 0);
+        var events1 = await ev1.ToListAsync();
+        var loadVersion1 = events1.Last().Version;
+
+        var versionV2 = await store.AppendToStreamAsync(streamName, loadVersion1,
+            new EventData[] { EventData.Create("y", "hello 2") });
+        var ev2 = store.LoadEventStreamAsync(streamName, 0);
+        var events2 = await ev2.ToListAsync();
+        var loadVersion2 = events2.Last().Version;
+
+        Assert.Single(events1);
+        Assert.Equal(1, loadVersion1);
+        Assert.Equal(versionV1, loadVersion1);
+        Assert.Equal(2, events2.Count);
+        Assert.Equal(2, loadVersion2);
+        Assert.Equal(versionV2, loadVersion2);
+    }
+
+    [Theory]
+    [InlineData(DaprEventStore.SliceMode.Off)]
+    [InlineData(DaprEventStore.SliceMode.TwoPhased)]
+    [InlineData(DaprEventStore.SliceMode.Transactional)]
+    [InlineData(DaprEventStore.SliceMode.OffAndSharedAll)]
+    public async Task AppendAndLoadChunk(DaprEventStore.SliceMode sliceMode)
+    {
+        store.Mode = sliceMode;
+        SetupMetaData();
+
+        var eventsToAppend = Enumerable.Range(0, 30)
+            .Select((i, x) => EventData.Create("t", $"hello {i + 1}"))
+            .ToArray();
+
+        var appendVersion = await store.AppendToStreamAsync(streamName, 0,
+            eventsToAppend);
+        var events = store.LoadEventStreamAsync(streamName, 0);
+        var eventsList = await events.ToArrayAsync();
+        var streamVersion = eventsList.Last().Version;
+
+        Assert.Equal(30, eventsToAppend.Length);
+        Assert.Equal(30, appendVersion);
+        Assert.Equal(30, eventsList.Last().Version);
+        Assert.Equal(30, eventsList.Length);
+        Assert.Equal(30, streamVersion);
+    }
+
+    [Fact]
+    public async Task BugHunt()
+    {
+        await store.AppendToStreamAsync(streamName, 0, new EventData[]
         {
-            store.Mode = sliceMode;
-            _ = await store.AppendToStreamAsync(streamName, 0, new EventData[]{ EventData.Create("test", "hello 1") });
-            var stream = store.LoadEventStreamAsync(streamName, 0);
+            EventData.Create("test","hello 1"),
+            //EventData.Create { Data = "hello 2" },
+        });
 
-            Assert.Equal(1, (await stream.LastAsync()).Version);
-        }
+        var stream = store.LoadEventStreamAsync(streamName, 1);
+        await stream.CountAsync();
+    }
 
-        [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off)]
-        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
-        [InlineData(DaprEventStore.SliceMode.Transactional)]
-        public async Task LoadMutipleReturnsVersion(DaprEventStore.SliceMode sliceMode)
-        {
-            store.Mode = sliceMode;
-
-            await store.AppendToStreamAsync(streamName, 0, new EventData[]{ EventData.Create("test", "hello 1") });
-            await store.AppendToStreamAsync(streamName, 1, new EventData[]{ EventData.Create("test", "hello 2") });
-            await store.AppendToStreamAsync(streamName, 2, new EventData[]{ EventData.Create("test", "hello 3") });
-
-            var stream = store.LoadEventStreamAsync(streamName, 0);
-
-            Assert.Equal(3, (await stream.LastAsync()).Version);
-        }
-
-        [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off)]
-        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
-        [InlineData(DaprEventStore.SliceMode.Transactional)]
-        public async Task LoadArrayReturnsVersion(DaprEventStore.SliceMode sliceMode)
-        {
-            store.Mode = sliceMode;
-
-            await store.AppendToStreamAsync(streamName, 0, new EventData[]
-            {
-                EventData.Create("test", "hello 1"),
-                EventData.Create("test", "hello 2"),
-                EventData.Create("test", "hello 3"),
-                EventData.Create("test", "hello 4")
-            });
-
-            var stream = store.LoadEventStreamAsync(streamName, 0);
-
-            Assert.Equal(4, (await stream.LastAsync()).Version);
-        }
-
-        [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off)]
-        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
-        [InlineData(DaprEventStore.SliceMode.Transactional)]
-        public async Task LoadMultipleArraysReturnsVersion(DaprEventStore.SliceMode sliceMode)
-        {
-            store.Mode = sliceMode;
-
-            await store.AppendToStreamAsync(streamName, 0, new EventData[]
-            {
-                EventData.Create("test", "hello 1"),
-                EventData.Create("test", "hello 2"),
-            });
-
-            await store.AppendToStreamAsync(streamName, 2, new EventData[]
-            {
-                EventData.Create("test", "hello 3"),
-                EventData.Create("test", "hello 4")
-            });
-
-            var stream = store.LoadEventStreamAsync(streamName, 0);
-
-            Assert.Equal(4, (await stream.LastAsync()).Version);
-        }
-
-        [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off)]
-        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
-        [InlineData(DaprEventStore.SliceMode.Transactional)]
-        public async Task LoadMultipleArraysReturnsVersionInSlice(DaprEventStore.SliceMode sliceMode)
-        {
-            store.Mode = sliceMode;
-
-            await store.AppendToStreamAsync(streamName, 0, new EventData[]
-            {
-                EventData.Create("test", "hello 1"),
-                EventData.Create("test", "hello 2"),
-            });
-
-            await store.AppendToStreamAsync(streamName, 2, new EventData[]
-            {
-                EventData.Create("test","hello 3"),
-                EventData.Create("test","hello 4")
-            });
-
-            var events = store.LoadEventStreamAsync(streamName, 2);
-
-            Assert.Equal(4, (await events.LastAsync()).Version);
-            Assert.Equal(3, await events.CountAsync());
-            Assert.Equal(4, (await events.LastAsync()).Version);
-        }
-
-        [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off)]
-        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
-        [InlineData(DaprEventStore.SliceMode.Transactional)]
-        public async Task AppendReturnsVersion(DaprEventStore.SliceMode sliceMode)
-        {
-            store.Mode = sliceMode;
-
-            var version = await store.AppendToStreamAsync(streamName, 0, new EventData[]{ EventData.Create("test", "hello 1") });
-
-            Assert.Equal(1, version);
-        }
-
-        [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off)]
-        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
-        [InlineData(DaprEventStore.SliceMode.Transactional)]
-        public async Task AppendMultipleReturnsVersion(DaprEventStore.SliceMode sliceMode)
-        {
-            store.Mode = sliceMode;
-
-            await store.AppendToStreamAsync(streamName, 0, new EventData[]{ EventData.Create("test", "hello 1") });
-            await store.AppendToStreamAsync(streamName, 1, new EventData[]{ EventData.Create("test", "hello 2") });
-            var version = await store.AppendToStreamAsync(streamName, 2, new EventData[]{ EventData.Create("test", "hello 3") });
-
-            Assert.Equal(3, version);
-        }
-
-        [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off)]
-        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
-        [InlineData(DaprEventStore.SliceMode.Transactional)]
-        public async Task AppendToWrongVersionThrows(DaprEventStore.SliceMode sliceMode)
-        {
-            store.Mode = sliceMode;
-
-            await Assert.ThrowsAsync<DBConcurrencyException>(async () =>
-            {
-                _ = await store.AppendToStreamAsync(streamName, 0, new EventData[]{ EventData.Create("test", "hello 1") });
-                await store.AppendToStreamAsync(streamName, 0, new EventData[]{ EventData.Create("test", "hello 2") });
-            });
-        }
-
-        [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off)]
-        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
-        [InlineData(DaprEventStore.SliceMode.Transactional)]
-        public async Task AppendAndLoad(DaprEventStore.SliceMode sliceMode)
-        {
-            store.Mode = sliceMode;
-
-            var versionV1 = await store.AppendToStreamAsync(streamName, 0,
-                new EventData[]{ EventData.Create("t", "hello 1") });
-            var ev1 = store.LoadEventStreamAsync(streamName, 0);
-            var events1 = await ev1.ToListAsync();
-            var loadVersion1 = events1.Last().Version;
-
-            var versionV2 = await store.AppendToStreamAsync(streamName, loadVersion1,
-                new EventData[]{ EventData.Create("y", "hello 2") });
-            var ev2 = store.LoadEventStreamAsync(streamName, 0);
-            var events2 = await ev2.ToListAsync();
-            var loadVersion2 = events2.Last().Version;
-
-            Assert.Single(events1);
-            Assert.Equal(1, loadVersion1);
-            Assert.Equal(versionV1, loadVersion1);
-            Assert.Equal(2, events2.Count);
-            Assert.Equal(2, loadVersion2);
-            Assert.Equal(versionV2, loadVersion2);
-        }
-
-        [Theory]
-        [InlineData(DaprEventStore.SliceMode.Off)]
-        [InlineData(DaprEventStore.SliceMode.TwoPhased)]
-        [InlineData(DaprEventStore.SliceMode.Transactional)]
-        public async Task AppendAndLoadChunk(DaprEventStore.SliceMode sliceMode)
-        {
-            store.Mode = sliceMode;
-
-            var eventsToAppend = Enumerable.Range(0, 30)
-                .Select((i,x) => EventData.Create("t", $"hello {i+1}"))
-                .ToArray();
-
-            var appendVersion = await store.AppendToStreamAsync(streamName, 0,
-                eventsToAppend);
-            var events = store.LoadEventStreamAsync(streamName, 0);
-            var eventsList = await events.ToArrayAsync();
-            var streamVersion = eventsList.Last().Version;
-
-            Assert.Equal(30, eventsToAppend.Length);
-            Assert.Equal(30, appendVersion);
-            Assert.Equal(30, eventsList.Last().Version);
-            Assert.Equal(30, eventsList.Length);
-            Assert.Equal(30, streamVersion);
-        }
-
-        [Fact]
-        public async Task BugHunt()
-        {
-            await store.AppendToStreamAsync(streamName, 0, new EventData[]
-            {
-                EventData.Create("test","hello 1"),
-                //EventData.Create { Data = "hello 2" },
-            });
-
-            var stream = store.LoadEventStreamAsync(streamName, 1);
-            await stream.CountAsync();
-        }
+    private void SetupMetaData()
+    {
+        if (store.Mode == DaprEventStore.SliceMode.OffAndSharedAll)
+            store.PartitionAllStream();
     }
 }
